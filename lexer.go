@@ -205,9 +205,9 @@ func (l *Lexer) readrune() (rune, int, error) {
 // indicating why the read is short.
 func (l *Lexer) Peek(n int) ([]rune, error) {
 	l.s.Lock()
-	//nolint:wrapcheck // Error doesn't need to be wrapped.
 	p, err := l.s.r.Peek(n)
 	l.s.Unlock()
+	//nolint:wrapcheck // Error doesn't need to be wrapped.
 	return p, err
 }
 
@@ -275,6 +275,7 @@ func (l *Lexer) advance(n int, discard bool) (int, error) {
 		}
 		if err != nil {
 			// EOF from Peek
+			//nolint:wrapcheck // Error doesn't need to be wrapped.
 			return advanced, err
 		}
 
@@ -311,7 +312,7 @@ func (l *Lexer) Find(tokens []string) (string, error) {
 	for {
 		rns, err := l.s.r.Peek(maxLen)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return "", err
+			return "", fmt.Errorf("peeking input: %w", err)
 		}
 		for j := range tokens {
 			if strings.HasPrefix(string(rns), tokens[j]) {
@@ -347,15 +348,15 @@ func (l *Lexer) SkipTo(tokens []string) (string, error) {
 
 		rns, err := l.s.r.Peek(bufS)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return "", err
+			return "", fmt.Errorf("peeking input: %w", err)
 		}
 
 		for i := 0; i < len(rns)-maxLen+1; i++ {
 			for j := range tokens {
 				if strings.HasPrefix(string(rns[i:i+maxLen]), tokens[j]) {
 					// We have found a match. Discard prior runes and return.
-					if _, err := l.advance(i, true); err != nil {
-						return "", err
+					if _, advErr := l.advance(i, true); advErr != nil {
+						return "", advErr
 					}
 					return tokens[j], nil
 				}
