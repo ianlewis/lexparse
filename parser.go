@@ -24,8 +24,6 @@ import (
 // perform an operation.
 var ErrMissingRequiredNode = errors.New("missing required node")
 
-// TODO(#459): Implement parser
-
 // Tree is the parse tree data structure.
 type Tree[V comparable] struct {
 	// Root points to the root Node in the parse tree.
@@ -37,7 +35,7 @@ type Node[V comparable] struct {
 	Parent   *Node[V]
 	Children []*Node[V]
 	Value    V
-	// TODO: Position,Line,Column in original input.
+	// TODO(#17): Position,Line,Column in original input.
 }
 
 // ParseFn is the signature for the parsing function used to build the
