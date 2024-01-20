@@ -52,7 +52,11 @@ func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if token == actionLeft {
 		nextState = lexparse.StateFn(stateAction)
 	}
-	return nextState, fmt.Errorf("lexing text: %w", err)
+
+	if err != nil {
+		return nextState, fmt.Errorf("lexing text: %w", err)
+	}
+	return nextState, nil
 }
 
 // stateAction lexes replacement actions (e.g. {{ var }}).
@@ -77,7 +81,11 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 		}
 		nextState = lexparse.StateFn(stateText)
 	}
-	return nextState, fmt.Errorf("lexing action: %w", err)
+
+	if err != nil {
+		return nextState, fmt.Errorf("lexing action: %w", err)
+	}
+	return nextState, nil
 }
 
 // parseInit delegates to another parse function based on lexeme type.
