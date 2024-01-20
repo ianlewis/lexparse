@@ -147,7 +147,7 @@ linters-settings:
     sections:
       - standard
       - default
-      - prefix(github.com/ianlewis/runeio)
+      - prefix(github.com/ianlewis/lexparse)
   gocritic:
     enabled-checks:
       # Diagnostic

@@ -16,11 +16,13 @@ package lexparse_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/ianlewis/lexparse"
 	"github.com/ianlewis/runeio"
+
+	"github.com/ianlewis/lexparse"
 )
 
 const (
@@ -33,8 +35,13 @@ const (
 	actionRight = "}}"
 )
 
+var (
+	errType   = errors.New("unexpected type")
+	errSymbol = errors.New("missing symbol")
+)
+
 // stateText parses normal text.
-func stateText(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	token, err := l.Find([]string{actionLeft})
 	lexeme := l.Lexeme(textType)
 	if lexeme.Value != "" {
@@ -45,14 +52,14 @@ func stateText(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if token == actionLeft {
 		nextState = lexparse.StateFn(stateAction)
 	}
-	return nextState, err
+	return nextState, fmt.Errorf("lexing text: %w", err)
 }
 
 // stateAction lexes replacement actions (e.g. {{ var }}).
-func stateAction(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Discard the left brackets
 	if _, err := l.Discard(len(actionLeft)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lexing action: %w", err)
 	}
 
 	// Find the right brackets.
@@ -65,12 +72,12 @@ func stateAction(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error)
 	var nextState lexparse.State
 	if token == actionRight {
 		// Discard the right brackets
-		if _, err := l.Discard(len(actionRight)); err != nil {
-			return nil, err
+		if _, errDiscard := l.Discard(len(actionRight)); errDiscard != nil {
+			return nil, fmt.Errorf("lexing action: %w", errDiscard)
 		}
 		nextState = lexparse.StateFn(stateText)
 	}
-	return nextState, err
+	return nextState, fmt.Errorf("lexing action: %w", err)
 }
 
 // parseInit delegates to another parse function based on lexeme type.
@@ -87,7 +94,7 @@ func parseInit(data map[string]string) lexparse.ParseFn[string] {
 		case actionType:
 			return parseAction(data), nil
 		default:
-			return nil, fmt.Errorf("unexpected type: %v", l.Type)
+			return nil, fmt.Errorf("%w: %v", errType, l.Type)
 		}
 	}
 }
@@ -104,7 +111,7 @@ func parseText(data map[string]string) lexparse.ParseFn[string] {
 	}
 }
 
-// parseAction handles replacement actions (e.g. {{ var }})
+// parseAction handles replacement actions (e.g. {{ var }}).
 func parseAction(data map[string]string) lexparse.ParseFn[string] {
 	return func(ctx context.Context, p *lexparse.Parser[string]) (lexparse.ParseFn[string], error) {
 		l := p.Next()
@@ -113,7 +120,7 @@ func parseAction(data map[string]string) lexparse.ParseFn[string] {
 		}
 		v, ok := data[strings.TrimSpace(l.Value)]
 		if !ok {
-			return nil, fmt.Errorf("missing symbol: %q", l.Value)
+			return nil, fmt.Errorf("%w: %q", errSymbol, l.Value)
 		}
 		p.Node(v)
 		return parseInit(data), nil
