@@ -28,5 +28,7 @@ jobs:
     name: check conventional commit compliance
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
       - name: Conventional commit check
         uses: cocogitto/cocogitto-action@ac6260150ee57e3164cd95b47fc84cdee9e3444c # v3.5
