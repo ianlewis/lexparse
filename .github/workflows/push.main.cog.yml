@@ -22,6 +22,7 @@ on:
 permissions:
   contents: read # Needed to check out the repo.
 
+jobs:
   cog-check:
     runs-on: ubuntu-latest
     name: check conventional commit compliance
