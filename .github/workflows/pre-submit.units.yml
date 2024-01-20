@@ -35,15 +35,9 @@ jobs:
       matrix:
         go-version:
           - "1.21"
-          # TODO: test using older versions of Go.
-          # - "1.20"
-          # - "1.19"
-          # - "1.18"
-          # - "1.17"
-          # - "1.16"
-          # - "1.15"
-          # - "1.14"
-          # - "1.13"
+          - "1.20"
+          - "1.19"
+          - "1.18"
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     if: ${{ always() }}
@@ -72,19 +66,6 @@ jobs:
     steps:
       - run: |
           [ "${UNIT_TESTS_RESULT}" == "success" ]
-
-  cog-check:
-    runs-on: ubuntu-latest
-    name: check conventional commit compliance
-    steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        with:
-          fetch-depth: 0
-          # pick the pr HEAD instead of the merge commit
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Conventional commit check
-        uses: cocogitto/cocogitto-action@ac6260150ee57e3164cd95b47fc84cdee9e3444c # v3.5
 
   # autogen for license headers
   ###############################
