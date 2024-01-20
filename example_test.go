@@ -48,7 +48,7 @@ func stateText(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	return nextState, err
 }
 
-// stateText lexes replacement actions (e.g. {{ var }}).
+// stateAction lexes replacement actions (e.g. {{ var }}).
 func stateAction(ctx context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Discard the left brackets
 	if _, err := l.Discard(len(actionLeft)); err != nil {
