@@ -31,4 +31,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Conventional commit check
-        uses: cocogitto/cocogitto-action@ac6260150ee57e3164cd95b47fc84cdee9e3444c # v3.5
+        uses: cocogitto/cocogitto-action@74f3572482643e11fe7f54e42714ff4ad5fa19ba # v3.6
