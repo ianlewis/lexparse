@@ -39,12 +39,12 @@ type Node[V comparable] struct {
 }
 
 // ParseFn is the signature for the parsing function used to build the
-// parse tree from lexemes.  The parsing function is passed to
+// parse tree from lexemes. The parsing function is passed to
 // Parse().
-// There may be more than one parsing function used by a parser.  The
-// top-level function is passed to Parse().  A parsing function hands
+// There may be more than one parsing function used by a parser. The
+// top-level function is passed to Parse(). A parsing function hands
 // parsing off to another function by returning a pointer to the other
-// function.  Parse() will continue calling returned functions until
+// function. Parse() will continue calling returned functions until
 // nil is returned.
 type ParseFn[V comparable] func(context.Context, *Parser[V]) (ParseFn[V], error)
 
@@ -73,10 +73,10 @@ type Parser[V comparable] struct {
 	lexeme *Lexeme
 }
 
-// Parse builds a parse tree by repeatedly calling parseFn.  parseFn
+// Parse builds a parse tree by repeatedly calling parseFn. parseFn
 // takes cxt and the Parser as arguments and returns the parseFn and
-// an error.  The parse tree is built when parseFn returns nil for the
-// parseFn.  Parsing can be cancelled by ctx.
+// an error. The parse tree is built when parseFn returns nil for the
+// parseFn. Parsing can be cancelled by ctx.
 func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Tree[V], error) {
 	for {
 		if parseFn == nil {
@@ -159,8 +159,8 @@ func (p *Parser[V]) Pop() *Node[V] {
 }
 
 // RotateLeft restructures the tree by moving the current node to the
-// position of its parent node.  The original parent node becomes a
-// child of the current node.  All other child nodes of the original
+// position of its parent node. The original parent node becomes a
+// child of the current node. All other child nodes of the original
 // parent remain unchanged, except for the current node which becomes
 // the new parent. If RotateLeft is called on the root node then
 // ErrMissingRequiredNode is returned.

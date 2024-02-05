@@ -98,7 +98,10 @@ type Lexer struct {
 	// lexemes is a channel into which Lexeme's will be emitted.
 	lexemes chan *Lexeme
 
-	// done is the stop channel
+	// stop is the stop channel
+	stop chan struct{}
+
+	// done is the done channel
 	done chan struct{}
 
 	// state is the current state of the Lexer.
@@ -143,6 +146,7 @@ func NewLexer(r BufferedRuneReader, startingState State) *Lexer {
 	l := &Lexer{
 		state:   startingState,
 		lexemes: make(chan *Lexeme),
+		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
 	l.s.r = r
@@ -395,22 +399,23 @@ func (l *Lexer) ignore() {
 // the lexer stop by cancelling ctx. The returned channel is closed when the
 // Lexer is finished running.
 func (l *Lexer) Lex(ctx context.Context) <-chan *Lexeme {
-	// Just return if the lexer is already done.
-	select {
-	case <-l.Done():
-		l.s.Unlock()
-		return l.lexemes
-	default:
-	}
+	// This first goroutine ensures that the stop channel is closed when the
+	// given context is done. This requests that the other goroutine stop.
+	go func() {
+		<-ctx.Done()
+		l.setErr(ctx.Err())
+		close(l.stop)
+	}()
 
+	// This goroutine runs the lexer. It will return and close the done and
+	// lexemes channels if stop is requested via the stop channel.
 	go func() {
 		var err error
 		defer close(l.done)
 		defer close(l.lexemes)
 		for l.state != nil {
 			select {
-			case <-ctx.Done():
-				l.setErr(ctx.Err())
+			case <-l.stop:
 				return
 			default:
 			}
@@ -424,13 +429,16 @@ func (l *Lexer) Lex(ctx context.Context) <-chan *Lexeme {
 			}
 		}
 	}()
+
 	return l.lexemes
 }
 
 // setErr sets the lexer's error value.
 func (l *Lexer) setErr(err error) {
 	l.s.Lock()
-	l.s.err = err
+	if l.s.err == nil {
+		l.s.err = err
+	}
 	l.s.Unlock()
 }
 
@@ -470,6 +478,10 @@ func (l *Lexer) Emit(lexeme *Lexeme) {
 	if lexeme == nil {
 		return
 	}
-	l.lexemes <- lexeme
-	l.Ignore()
+	select {
+	case l.lexemes <- lexeme:
+		l.Ignore()
+	case <-l.stop:
+		return
+	}
 }

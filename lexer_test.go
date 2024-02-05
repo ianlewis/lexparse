@@ -20,6 +20,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/ianlewis/runeio"
@@ -33,19 +34,24 @@ const (
 type wordState struct{}
 
 func (w *wordState) Run(_ context.Context, l *Lexer) (State, error) {
-	for {
-		rn, _, err := l.ReadRune()
-		if rn == ' ' || errors.Is(err, io.EOF) {
-			word := l.Lexeme(wordType)
-			word.Value = strings.TrimRight(word.Value, " ")
-			if word.Value != "" {
-				l.Emit(word)
-			}
-		}
-		if err != nil {
-			return nil, err
+	rn, err := l.Peek(1)
+	if errors.Is(err, io.EOF) || (err == nil && unicode.IsSpace(rn[0])) {
+		// NOTE: This can emit empty words.
+		l.Emit(l.Lexeme(wordType))
+		// Discard the space
+		if _, dErr := l.Discard(len(rn)); dErr != nil {
+			return nil, dErr
 		}
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, aErr := l.Advance(len(rn)); aErr != nil {
+		return nil, aErr
+	}
+
+	return w, nil
 }
 
 func TestLexer_Peek(t *testing.T) {

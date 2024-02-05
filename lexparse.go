@@ -16,7 +16,10 @@
 // generic lexers and parsers over byte streams.
 package lexparse
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // LexParse runs the Lexer passing lexemes to the parser functions.
 func LexParse[V comparable](
@@ -26,6 +29,26 @@ func LexParse[V comparable](
 	initFn ParseFn[V],
 ) (*Tree[V], error) {
 	l := NewLexer(r, initState)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	p := NewParser[V](l.Lex(ctx))
-	return p.Parse(ctx, initFn)
+	t, pErr := p.Parse(ctx, initFn)
+	cancel()
+
+	<-l.Done()
+
+	// Check for lexing error.
+	var err error
+	lErr := l.Err()
+	if lErr != nil && !errors.Is(lErr, context.Canceled) {
+		err = lErr
+	}
+
+	// If no lexing error return parsing error.
+	if err == nil {
+		err = pErr
+	}
+
+	return t, err
 }
