@@ -33,8 +33,24 @@ const (
 	inputABC   = "A B C"
 )
 
+func newTree[V comparable](n *Node[V]) *Tree[V] {
+	t := &Tree[V]{
+		Root: n,
+	}
+	addParent(t.Root)
+	return t
+}
+
+func addParent[V comparable](n *Node[V]) {
+	for _, c := range n.Children {
+		c.Parent = n
+		addParent(c)
+	}
+}
+
 // compareTrees returns true if two trees are equivalent by comparing the
 // value of each node in both trees.
+// TODO(#31): Remove compareTrees.
 func compareTrees[T comparable](t1, t2 *Tree[T]) (bool, error) {
 	if diff := cmp.Diff(t2, t1); diff != "" {
 		return false, fmt.Errorf("%w (-want, +got): \n%s", errTreeMismatchValue, diff)
@@ -139,8 +155,8 @@ func TestParser_parse_op2(t *testing.T) {
 
 	// Does the tree look as expected?
 
-	expectedTree := &Tree[string]{
-		Root: &Node[string]{
+	expectedTree := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "op",
@@ -163,8 +179,7 @@ func TestParser_parse_op2(t *testing.T) {
 				},
 			},
 		},
-	}
-	debugPrintTreeNodes[string](0, expectedTree.Root)
+	)
 
 	got, expErr := compareTrees[string](tree, expectedTree)
 	if expErr != nil {
@@ -177,8 +192,8 @@ func TestParser_parse_op2(t *testing.T) {
 
 	// Does checking the shape of the tree work as expected?
 
-	treeUnexpShape := &Tree[string]{
-		Root: &Node[string]{
+	treeUnexpShape := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "op",
@@ -199,8 +214,7 @@ func TestParser_parse_op2(t *testing.T) {
 				},
 			},
 		},
-	}
-	debugPrintTreeNodes[string](0, treeUnexpShape.Root)
+	)
 
 	got, unexpShpErr := compareTrees[string](tree, treeUnexpShape)
 	if unexpShpErr == nil {
@@ -266,8 +280,8 @@ func TestParser_AdoptSibling(t *testing.T) {
 	tree1 := p.Tree()
 	debugPrintTreeNodes[string](0, tree1.Root)
 
-	expected1 := &Tree[string]{
-		Root: &Node[string]{
+	expected1 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "op",
@@ -285,7 +299,7 @@ func TestParser_AdoptSibling(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr := compareTrees[string](tree1, expected1)
 	if expErr != nil {
@@ -309,8 +323,8 @@ func TestParser_AdoptSibling(t *testing.T) {
 	tree2 := p.Tree()
 	debugPrintTreeNodes[string](0, tree2.Root)
 
-	expected2 := &Tree[string]{
-		Root: &Node[string]{
+	expected2 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "op",
@@ -330,7 +344,7 @@ func TestParser_AdoptSibling(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr = compareTrees[string](tree2, expected2)
 	if expErr != nil {
@@ -460,17 +474,16 @@ func TestParser_Node(t *testing.T) {
 
 	p.Node("1")
 	tree1 := p.Tree()
-	debugPrintTreeNodes[string](0, tree1.Root)
 
-	expected1 := &Tree[string]{
-		Root: &Node[string]{
+	expected1 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "1",
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr := compareTrees[string](tree1, expected1)
 	if expErr != nil {
@@ -485,8 +498,8 @@ func TestParser_Node(t *testing.T) {
 	tree2 := p.Tree()
 	debugPrintTreeNodes[string](0, tree2.Root)
 
-	expected2 := &Tree[string]{
-		Root: &Node[string]{
+	expected2 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "1",
@@ -496,7 +509,7 @@ func TestParser_Node(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr = compareTrees[string](tree2, expected2)
 	if expErr != nil {
@@ -512,8 +525,8 @@ func TestParser_Node(t *testing.T) {
 	tree3 := p.Tree()
 	debugPrintTreeNodes[string](0, tree3.Root)
 
-	expected3 := &Tree[string]{
-		Root: &Node[string]{
+	expected3 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "1",
@@ -526,15 +539,10 @@ func TestParser_Node(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
-	got, expErr = compareTrees[string](tree3, expected3)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
-	}
-	want = true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expected3, tree3); diff != "" {
+		t.Errorf("%v (-want, +got): \n%s", errTreeMismatchValue, diff)
 	}
 }
 
@@ -555,24 +563,21 @@ func TestParser_Pop(t *testing.T) {
 	tree1 := p.Tree()
 	debugPrintTreeNodes[string](0, tree1.Root)
 
-	root := &Node[string]{}
-	root.Children = append(root.Children,
+	expected1 := newTree(
 		&Node[string]{
-			Parent: root,
-			Value:  "1",
-		},
-		&Node[string]{
-			Parent: root,
-			Value:  "2",
-		},
-		&Node[string]{
-			Parent: root,
-			Value:  "3",
+			Children: []*Node[string]{
+				{
+					Value: "1",
+				},
+				{
+					Value: "2",
+				},
+				{
+					Value: "3",
+				},
+			},
 		},
 	)
-	expected1 := &Tree[string]{
-		Root: root,
-	}
 
 	if diff := cmp.Diff(expected1, tree1); diff != "" {
 		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
@@ -629,16 +634,15 @@ func TestParser_Push(t *testing.T) {
 	p.Push("1")
 	tree1 := p.Tree()
 
-	root1 := &Node[string]{}
-	root1.Children = append(root1.Children,
+	expected1 := newTree(
 		&Node[string]{
-			Parent: root1,
-			Value:  "1",
+			Children: []*Node[string]{
+				{
+					Value: "1",
+				},
+			},
 		},
 	)
-	expected1 := &Tree[string]{
-		Root: root1,
-	}
 
 	if diff := cmp.Diff(expected1, tree1); diff != "" {
 		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
@@ -683,8 +687,8 @@ func TestParser_RotateLeft(t *testing.T) {
 	tree1 := p.Tree()
 	debugPrintTreeNodes[string](0, tree1.Root)
 
-	expected1 := &Tree[string]{
-		Root: &Node[string]{
+	expected1 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "op",
@@ -699,7 +703,7 @@ func TestParser_RotateLeft(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr := compareTrees[string](tree1, expected1)
 	if expErr != nil {
@@ -725,8 +729,8 @@ func TestParser_RotateLeft(t *testing.T) {
 	tree2 := p.Tree()
 	debugPrintTreeNodes[string](0, tree2.Root)
 
-	expected2 := &Tree[string]{
-		Root: &Node[string]{
+	expected2 := newTree(
+		&Node[string]{
 			Children: []*Node[string]{
 				{
 					Value: "foo",
@@ -749,7 +753,7 @@ func TestParser_RotateLeft(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	got, expErr = compareTrees[string](tree2, expected2)
 	if expErr != nil {
