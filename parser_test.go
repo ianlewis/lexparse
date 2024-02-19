@@ -22,15 +22,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ianlewis/runeio"
-
 	"github.com/google/go-cmp/cmp"
+	"github.com/ianlewis/runeio"
 )
 
-var (
-	errTreeMismatchSize  = errors.New("trees have different number of nodes")
-	errTreeMismatchValue = errors.New("trees node values do not match")
-)
+var errTreeMismatchValue = errors.New("trees node values do not match")
 
 const (
 	debugPrint = false
@@ -40,41 +36,9 @@ const (
 // compareTrees returns true if two trees are equivalent by comparing the
 // value of each node in both trees.
 func compareTrees[T comparable](t1, t2 *Tree[T]) (bool, error) {
-	// return doCompareTrees(t1.Root, t2.Root)
 	if diff := cmp.Diff(t2, t1); diff != "" {
 		return false, fmt.Errorf("%w (-want, +got): \n%s", errTreeMismatchValue, diff)
 	}
-	return true, nil
-}
-
-func doCompareTrees[T comparable](n1, n2 *Node[T]) (bool, error) {
-	if n1 == nil && n2 == nil {
-		return true, nil
-	}
-
-	if (n1 == nil && n2 != nil) || (n1 != nil && n2 == nil) {
-		return false, errTreeMismatchSize
-	}
-
-	if n1.Value != n2.Value {
-		return false, fmt.Errorf("node values: %+v, %+v, %w", n1, n2, errTreeMismatchValue)
-	}
-
-	// TODO: compare Pos, Line, Column
-	if n1.Pos != n2.Pos {
-		return false, fmt.Errorf("node pos: %+v, %+v, %w", n1, n2, errTreeMismatchValue)
-	}
-
-	if len(n1.Children) != len(n2.Children) {
-		return false, errTreeMismatchSize
-	}
-	for i := range n1.Children {
-		b, err := doCompareTrees(n1.Children[i], n2.Children[i])
-		if b != true || err != nil {
-			return b, err
-		}
-	}
-
 	return true, nil
 }
 
