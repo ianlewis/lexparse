@@ -262,6 +262,18 @@ func (p *Parser[V]) Replace(v V) V {
 	return oldVal
 }
 
+// SetLeft sets the left child in the case of a binary tree and returns the
+// previous value. The current node is not updated.
+func (p *Parser[V]) SetLeft(l *Node[V]) *Node[V] {
+	return p.node.SetLeft(l)
+}
+
+// SetRight sets the right child in the case of a binary tree and returns the
+// previous value.
+func (p *Parser[V]) SetRight(r *Node[V]) *Node[V] {
+	return p.node.SetRight(r)
+}
+
 // RotateLeft performs a left rotation in the case of a binary tree at the
 // current tree location and returns the new root of the rotated sub-tree.
 // If the current node has no right child, this method is a no-op.
