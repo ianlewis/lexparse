@@ -52,6 +52,8 @@ func TestLexParse(t *testing.T) {
 	t.Parallel()
 
 	t.Run("basic", func(t *testing.T) {
+		t.Parallel()
+
 		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -82,6 +84,8 @@ func TestLexParse(t *testing.T) {
 
 	// Test when lexer encounters an error.
 	t.Run("lexer error", func(t *testing.T) {
+		t.Parallel()
+
 		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -95,6 +99,8 @@ func TestLexParse(t *testing.T) {
 
 	// Test when parser encounters an error.
 	t.Run("parser error", func(t *testing.T) {
+		t.Parallel()
+
 		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
 
 		ctx, cancel := context.WithCancel(context.Background())
