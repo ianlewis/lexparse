@@ -455,6 +455,11 @@ func (l *Lexer) Done() <-chan struct{} {
 	return l.done
 }
 
+// Value returns the current up to the current position.
+func (l *Lexer) Value() string {
+	return l.s.b.String()
+}
+
 // Lexeme returns a new Lexeme at the current position.
 func (l *Lexer) Lexeme(typ LexemeType) *Lexeme {
 	l.s.Lock()
