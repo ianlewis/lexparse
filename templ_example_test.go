@@ -135,8 +135,8 @@ func parseAction(data map[string]string) lexparse.ParseFn[string] {
 	}
 }
 
-// ExampleLexParse implements a simple templating language.
-func ExampleLexParse() {
+// Example_template implements a simple templating language.
+func Example_template() {
 	r := runeio.NewReader(strings.NewReader("Hello {{ subject }}!"))
 	data := map[string]string{"subject": "World"}
 	t, err := lexparse.LexParse(context.Background(), r, lexparse.StateFn(stateText), parseInit(data))
