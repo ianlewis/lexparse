@@ -85,7 +85,7 @@ type Lexeme struct {
 	// Pos is the position in the byte stream where the Lexeme was found.
 	Pos int
 
-	// Line is the line numbero where the Lexeme was found.
+	// Line is the line number where the Lexeme was found.
 	Line int
 
 	// Column is the column in the line where the Lexeme was found.

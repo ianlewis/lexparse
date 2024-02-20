@@ -35,7 +35,15 @@ type Node[V comparable] struct {
 	Parent   *Node[V]
 	Children []*Node[V]
 	Value    V
-	// TODO(#17): Position,Line,Column in original input.
+
+	// Pos is the position in the input where the value was found.
+	Pos int
+
+	// Line is the line number in the input where the value was found.
+	Line int
+
+	// Column is the column in the line of the input where the value was found.
+	Column int
 }
 
 // ParseFn is the signature for the parsing function used to build the
@@ -142,9 +150,19 @@ func (p *Parser[V]) Push(v V) *Node[V] {
 // Node creates a new node and adds it as a child to the current node.
 func (p *Parser[V]) Node(v V) *Node[V] {
 	cur := p.Pos()
+	var pos, line, col int
+	if p.lexeme != nil {
+		pos = p.lexeme.Pos
+		line = p.lexeme.Line
+		col = p.lexeme.Column
+	}
+
 	node := &Node[V]{
 		Parent: p.Pos(),
 		Value:  v,
+		Pos:    pos,
+		Line:   line,
+		Column: col,
 	}
 	cur.Children = append(cur.Children, node)
 	return node
