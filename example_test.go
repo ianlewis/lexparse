@@ -37,7 +37,7 @@ const (
 
 var (
 	errType   = errors.New("unexpected type")
-	errSymbol = errors.New("missing symbol")
+	errSymbol = errors.New("invalid symbol")
 )
 
 type nodeType int
@@ -90,7 +90,7 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if token == actionRight {
 		// Emit the lexeme.
 		lexeme := l.Lexeme(actionType)
-		if lexeme.Value != "" {
+		if strings.TrimSpace(lexeme.Value) != "" {
 			l.Emit(lexeme)
 		}
 
@@ -108,7 +108,7 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 }
 
 // parseInit delegates to another parse function based on lexeme type.
-func parseInit(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
 	l := p.Peek()
 	if l == nil {
 		return nil, nil
@@ -125,7 +125,7 @@ func parseInit(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 }
 
 // parseText handles normal text.
-func parseText(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
 	l := p.Next()
 	if l == nil {
 		return nil, nil
@@ -138,11 +138,12 @@ func parseText(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 }
 
 // parseAction handles replacement actions (e.g. {{ var }}).
-func parseAction(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
 	l := p.Next()
 	if l == nil {
 		return nil, nil
 	}
+
 	p.Node(&tmplNode{
 		typ:    actionNodeType,
 		action: strings.TrimSpace(l.Value),
@@ -151,17 +152,21 @@ func parseAction(ctx context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.P
 }
 
 // execute executes the template with the given data.
-func execute(t *lexparse.Tree[*tmplNode], data map[string]string) string {
+func execute(t *lexparse.Tree[*tmplNode], data map[string]string) (string, error) {
 	var b strings.Builder
 	for _, n := range t.Root.Children {
 		switch n.Value.typ {
 		case textNodeType:
 			b.WriteString(n.Value.text)
 		case actionNodeType:
-			b.WriteString(data[n.Value.action])
+			val, ok := data[n.Value.action]
+			if !ok {
+				return b.String(), fmt.Errorf("%w: %q", errSymbol, n.Value.action)
+			}
+			b.WriteString(val)
 		}
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // ExampleLexParse implements a simple templating language.
@@ -171,8 +176,11 @@ func ExampleLexParse() {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Print(execute(t, map[string]string{"subject": "World"}))
+	txt, err := execute(t, map[string]string{"subject": "World"})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(txt)
 
 	// Output: Hello World!
 }
