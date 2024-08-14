@@ -395,9 +395,12 @@ func (l *Lexer) ignore() {
 	l.s.b = strings.Builder{}
 }
 
-// Lex starts a new goroutine to parse the content. The caller can request that
-// the lexer stop by cancelling ctx. The returned channel is closed when the
-// Lexer is finished running.
+// Lex starts a new goroutine to parse the content. Run is called on each state
+// starting with the initial state. Each state then returns the subsequent state
+// which is run until a state returns nil indicating that lexing has finished.
+//
+// The caller can request that the lexer stop by cancelling ctx. The
+// returned channel is closed when the Lexer is finished running.
 func (l *Lexer) Lex(ctx context.Context) <-chan *Lexeme {
 	// This first goroutine ensures that the stop channel is closed when the
 	// given context is done. This requests that the other goroutine stop.

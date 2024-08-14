@@ -73,6 +73,7 @@ func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if err != nil {
 		return nextState, fmt.Errorf("lexing text: %w", err)
 	}
+
 	return nextState, nil
 }
 
@@ -86,6 +87,7 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Find the right brackets.
 	token, err := l.Find([]string{actionRight})
 
+	// Process the token if the right bracket is found.
 	var nextState lexparse.State
 	if token == actionRight {
 		// Emit the lexeme.
@@ -104,6 +106,7 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if err != nil {
 		return nextState, fmt.Errorf("lexing action: %w", err)
 	}
+
 	return nextState, nil
 }
 
@@ -126,28 +129,36 @@ func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Parse
 
 // parseText handles normal text.
 func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+	// Get the next lexeme from the parser.
 	l := p.Next()
 	if l == nil {
 		return nil, nil
 	}
+	// Emit a text node.
 	p.Node(&tmplNode{
 		typ:  textNodeType,
 		text: l.Value,
 	})
+
+	// Return to the init state.
 	return parseInit, nil
 }
 
 // parseAction handles replacement actions (e.g. {{ var }}).
 func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+	// Get the next lexeme from the parser.
 	l := p.Next()
 	if l == nil {
 		return nil, nil
 	}
 
+	// Emit an action (variable) node.
 	p.Node(&tmplNode{
 		typ:    actionNodeType,
 		action: strings.TrimSpace(l.Value),
 	})
+
+	// Return to the init state.
 	return parseInit, nil
 }
 
@@ -157,8 +168,10 @@ func execute(t *lexparse.Tree[*tmplNode], data map[string]string) (string, error
 	for _, n := range t.Root.Children {
 		switch n.Value.typ {
 		case textNodeType:
+			// Write raw text to the output.
 			b.WriteString(n.Value.text)
 		case actionNodeType:
+			// Replace templated variables with given data.
 			val, ok := data[n.Value.action]
 			if !ok {
 				return b.String(), fmt.Errorf("%w: %q", errSymbol, n.Value.action)
