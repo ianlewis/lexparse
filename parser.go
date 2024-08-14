@@ -169,10 +169,13 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 }
 
 // Pop updates the current node position to the current node's parent
-// returning the previous current node.
+// returning the previous current node. It is a no-op that returns the root
+// node if called on the root node.
 func (p *Parser[V]) Pop() *Node[V] {
 	n := p.node
-	p.node = p.node.Parent
+	if p.node.Parent != nil {
+		p.node = p.node.Parent
+	}
 	return n
 }
 

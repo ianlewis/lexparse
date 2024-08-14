@@ -546,6 +546,28 @@ func TestParser_Node(t *testing.T) {
 	}
 }
 
+func TestParser_Pop_root(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+	n := p.Pop()
+	tree := p.Tree()
+	expected := tree.Root
+
+	if diff := cmp.Diff(expected, n); diff != "" {
+		t.Errorf("Pop: (-want, +got): \n%s", diff)
+	}
+
+	expectedTree := newTree(&Node[string]{})
+	if diff := cmp.Diff(expectedTree, tree); diff != "" {
+		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
+	}
+
+	if diff := cmp.Diff(p.node, tree.Root); diff != "" {
+		t.Errorf("unexpected node (-want, +got): \n%s", diff)
+	}
+}
+
 func TestParser_Pop(t *testing.T) {
 	t.Parallel()
 
