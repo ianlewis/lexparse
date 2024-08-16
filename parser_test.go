@@ -175,7 +175,6 @@ func TestParser_AdoptSibling(t *testing.T) {
 			{
 				Value: "foo",
 				Children: []*Node[string]{
-
 					{
 						Value: "2",
 					},
