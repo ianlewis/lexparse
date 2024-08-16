@@ -150,13 +150,13 @@ func TestParser_AdoptSibling(t *testing.T) {
 		&Node[string]{
 			Value: "op",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "1",
 				},
-				&Node[string]{
+				{
 					Value: "2",
 				},
-				&Node[string]{
+				{
 					Value: "foo",
 				},
 			},
@@ -225,7 +225,7 @@ func TestParser_AdoptSibling_notfound(t *testing.T) {
 		&Node[string]{
 			Value: "op",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "foo",
 				},
 			},
@@ -355,7 +355,7 @@ func TestParser_ClimbPos(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
 			},
@@ -430,7 +430,7 @@ func TestParser_Push(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
 			},
@@ -456,7 +456,7 @@ func TestParser_Replace(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
 			},
@@ -475,7 +475,7 @@ func TestParser_Replace(t *testing.T) {
 		&Node[string]{
 			Value: "C",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
 			},
@@ -525,16 +525,16 @@ func TestParser_RotateLeft(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "A1",
 				},
-				&Node[string]{
+				{
 					Value: "A2",
 					Children: []*Node[string]{
-						&Node[string]{
+						{
 							Value: "A2-1",
 						},
-						&Node[string]{
+						{
 							Value: "A2-2",
 						},
 					},
@@ -556,16 +556,16 @@ func TestParser_RotateLeft(t *testing.T) {
 		&Node[string]{
 			Value: "A2",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "A2-1",
 				},
-				&Node[string]{
+				{
 					Value: "A2-2",
 				},
-				&Node[string]{
+				{
 					Value: "A",
 					Children: []*Node[string]{
-						&Node[string]{
+						{
 							Value: "A1",
 						},
 					},
@@ -597,7 +597,7 @@ func TestParser_RotateLeft_root(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
 			},
@@ -621,13 +621,13 @@ func TestParser_RotateLeft_root(t *testing.T) {
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
-				&Node[string]{
+				{
 					Value: "B",
 				},
-				&Node[string]{
+				{
 					Value: "", // Default root node's value.
 					Children: []*Node[string]{
-						&Node[string]{
+						{
 							Value: "C",
 						},
 					},
