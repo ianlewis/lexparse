@@ -17,15 +17,11 @@ run:
   concurrency: 2
   deadline: 5m
 issues:
-  include:
-    - EXC0012
-    - EXC0013
-    - EXC0014
-    - EXC0015
-  exclude-rules:
-    - path: example_test.go
-      linters:
-        - errcheck
+  # include:
+  #   - EXC0012
+  #   - EXC0013
+  #   - EXC0014
+  #   - EXC0015
   # Maximum issues count per one linter.
   # Set to 0 to disable.
   # Default: 50
@@ -38,9 +34,12 @@ issues:
 linters:
   disable-all: true
   enable:
+    # Some linters have been removed because of the go 1.18 issues.
+    # https://github.com/golangci/golangci-lint/issues/2649
     - asciicheck
     - depguard
     - dogsled
+    - err113
     - errcheck
     - errorlint
     - exhaustive
@@ -53,7 +52,6 @@ linters:
     - gocyclo
     - godot
     - godox
-    - goerr113
     - gofmt
     - gofumpt
     - goheader
@@ -149,6 +147,7 @@ linters-settings:
       - default
       - prefix(github.com/ianlewis/lexparse)
   gocritic:
+    disable-all: true
     enabled-checks:
       # Diagnostic
       - appendAssign
