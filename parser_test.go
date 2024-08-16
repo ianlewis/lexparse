@@ -17,59 +17,31 @@ package lexparse
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/ianlewis/runeio"
 )
 
 var errTreeMismatchValue = errors.New("trees node values do not match")
 
-const (
-	debugPrint = false
-	inputABC   = "A B C"
-)
-
-func newTree[V comparable](n *Node[V]) *Tree[V] {
-	t := &Tree[V]{
-		Root: n,
-	}
-	addParent(t.Root)
-	return t
+func newTree[V comparable](n ...*Node[V]) *Node[V] {
+	root := &Node[V]{}
+	root.Children = append(root.Children, n...)
+	return addParent(root)
 }
 
-func addParent[V comparable](n *Node[V]) {
-	for _, c := range n.Children {
-		c.Parent = n
-		addParent(c)
+// addParent sets the parent reference on all children of n.
+func addParent[V comparable](n *Node[V]) *Node[V] {
+	if n != nil {
+		for _, c := range n.Children {
+			c.Parent = n
+			_ = addParent(c)
+		}
 	}
-}
-
-// compareTrees returns true if two trees are equivalent by comparing the
-// value of each node in both trees.
-// TODO(#31): Remove compareTrees.
-func compareTrees[T comparable](t1, t2 *Tree[T]) (bool, error) {
-	if diff := cmp.Diff(t2, t1); diff != "" {
-		return false, fmt.Errorf("%w (-want, +got): \n%s", errTreeMismatchValue, diff)
-	}
-	return true, nil
-}
-
-// debugPrintTreeNodes walks tree nodes and prints a visualization of the tree
-// when debugPrint is true.
-func debugPrintTreeNodes[T comparable](n int, node *Node[T]) {
-	if !debugPrint {
-		return
-	}
-
-	log.Printf(strings.Repeat(" ", n)+"Value: %+v", node.Value)
-
-	for _, c := range node.Children {
-		debugPrintTreeNodes[T](n+1, c)
-	}
+	return n
 }
 
 // testLexer creates and returns a lexer.
@@ -82,8 +54,8 @@ func testLexer(t *testing.T, input string) (<-chan *Lexeme, context.CancelFunc) 
 	return l.Lex(ctx), cancel
 }
 
-// testParse creates and runs a lexer, and returns the parse tree.
-func testParse(t *testing.T, input string) (*Tree[string], error) {
+// testParse creates and runs a lexer, and returns the root of the parse tree.
+func testParse(t *testing.T, input string) (*Node[string], error) {
 	t.Helper()
 
 	lexemes, cancel := testLexer(t, input)
@@ -98,8 +70,13 @@ func testParse(t *testing.T, input string) (*Tree[string], error) {
 			}
 
 			switch lexeme.Value {
-			case "op":
-				p.Push(lexeme.Value)
+			case "climb":
+				// Climb the tree without adding a node.
+				_ = p.Climb()
+			case "replace":
+				_ = p.Replace(lexeme.Value)
+			case "push":
+				_ = p.Push(lexeme.Value)
 			default:
 				p.Node(lexeme.Value)
 			}
@@ -108,35 +85,22 @@ func testParse(t *testing.T, input string) (*Tree[string], error) {
 	}
 
 	ctx := context.Background()
-	tree, err := p.Parse(ctx, pFn)
-	return tree, err
+	root, err := p.Parse(ctx, pFn)
+	return root, err
 }
 
 func TestParser_new(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
+	expectedRoot := &Node[string]{}
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Fatalf("NewParser: p.root (-want, +got): \n%s", diff)
+	}
 
-	tree := p.Tree()
-	if tree == nil {
-		t.Errorf("tree should not be nil")
-	} else {
-		if tree.Root == nil {
-			t.Errorf("tree root should not be nil")
-		}
-		if tree.Root.Parent != nil {
-			t.Errorf("tree root parent should be nil")
-		}
-		if len(tree.Root.Children) != 0 {
-			t.Errorf("tree root should have no children")
-		}
-		if tree.Root.Value != "" {
-			t.Errorf("tree root value should be blank")
-		}
+	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
+		t.Errorf("NewParser: p.node (-want, +got): \n%s", diff)
 	}
 }
 
@@ -144,582 +108,465 @@ func TestParser_new(t *testing.T) {
 func TestParser_parse_op2(t *testing.T) {
 	t.Parallel()
 
-	input := "op 1 op 2 3"
+	input := "push 1 push 2 3"
 
-	tree, err := testParse(t, input)
+	root, err := testParse(t, input)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	debugPrintTreeNodes[string](0, tree.Root)
-
 	// Does the tree look as expected?
-
-	expectedTree := newTree(
-		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "op",
-					Children: []*Node[string]{
-						{
-							Value: "1",
-						},
-						{
-							Value: "op",
-							Children: []*Node[string]{
-								{
-									Value: "2",
-								},
-								{
-									Value: "3",
-								},
-							},
-						},
+	expectedRoot := newTree(&Node[string]{
+		Value: "push",
+		Children: []*Node[string]{
+			{
+				Value: "1",
+			},
+			{
+				Value: "push",
+				Children: []*Node[string]{
+					{
+						Value: "2",
+					},
+					{
+						Value: "3",
 					},
 				},
 			},
 		},
-	)
+	})
 
-	got, expErr := compareTrees[string](tree, expectedTree)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
-	}
-	want := true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
-	}
-
-	// Does checking the shape of the tree work as expected?
-
-	treeUnexpShape := newTree(
-		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "op",
-					Children: []*Node[string]{
-						{
-							Value: "1",
-						},
-						{
-							Value: "op",
-						},
-						{
-							Value: "2",
-						},
-						{
-							Value: "3",
-						},
-					},
-				},
-			},
-		},
-	)
-
-	got, unexpShpErr := compareTrees[string](tree, treeUnexpShape)
-	if unexpShpErr == nil {
-		t.Errorf("error unexpected trees match: %s", unexpShpErr)
-	}
-	want = false
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
-	}
-
-	// Does checking values in the the tree work as expected?
-
-	treeUnexpValue := &Tree[string]{
-		Root: &Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "op",
-					Children: []*Node[string]{
-						{
-							Value: "1",
-						},
-						{
-							Value: "op",
-							Children: []*Node[string]{
-								{
-									Value: "2",
-								},
-								{
-									Value: "4",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	debugPrintTreeNodes[string](0, treeUnexpValue.Root)
-
-	got, unexpValErr := compareTrees[string](tree, treeUnexpValue)
-	if unexpValErr == nil {
-		t.Errorf("error unexpected trees match: %s", unexpValErr)
-	}
-	want = false
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedRoot, root); diff != "" {
+		t.Fatalf("Parse: root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_AdoptSibling(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	p.Push("op")
-	p.Node("1")
-	p.Node("2")
-	p.Push("foo")
-	tree1 := p.Tree()
-	debugPrintTreeNodes[string](0, tree1.Root)
-
-	expected1 := newTree(
+	p.root = newTree(
 		&Node[string]{
+			Value: "op",
 			Children: []*Node[string]{
-				{
-					Value: "op",
-					Children: []*Node[string]{
-						{
-							Value: "1",
-						},
-						{
-							Value: "2",
-						},
-						{
-							Value: "foo",
-						},
-					},
+				&Node[string]{
+					Value: "1",
+				},
+				&Node[string]{
+					Value: "2",
+				},
+				&Node[string]{
+					Value: "foo",
 				},
 			},
 		},
 	)
+	// Current node is "foo"
+	p.node = p.root.Children[0].Children[2]
 
-	got, expErr := compareTrees[string](tree1, expected1)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
-	}
-	want := true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
-	}
+	// expected tree after AdoptSibling
+	expectedRoot := newTree(&Node[string]{
+		Value: "op",
+		Children: []*Node[string]{
+			{
+				Value: "1",
+			},
+			{
+				Value: "foo",
+				Children: []*Node[string]{
 
-	adoptNode, adoptErr := p.AdoptSibling()
-	wantNode := p.Pos()
-	var wantErr error
-	if adoptNode != wantNode {
-		t.Errorf("AdoptSibling node: want: %v, got: %v", wantNode, adoptNode)
-	}
-	if !errors.Is(adoptErr, wantErr) {
-		t.Errorf("AdoptSibling err: want: %v, got: %v", wantErr, adoptErr)
-	}
-
-	tree2 := p.Tree()
-	debugPrintTreeNodes[string](0, tree2.Root)
-
-	expected2 := newTree(
-		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "op",
-					Children: []*Node[string]{
-						{
-							Value: "1",
-						},
-						{
-							Value: "foo",
-							Children: []*Node[string]{
-								{
-									Value: "2",
-								},
-							},
-						},
+					{
+						Value: "2",
 					},
 				},
 			},
 		},
-	)
+	})
 
-	got, expErr = compareTrees[string](tree2, expected2)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
+	n, err := p.AdoptSibling()
+	if diff := cmp.Diff(nil, err); diff != "" {
+		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
 	}
-	want = true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(n, expectedRoot.Children[0].Children[1]); diff != "" {
+		t.Fatalf("AdoptSibling: (-want, +got): \n%s", diff)
+	}
+
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Fatalf("AdoptSibling: p.root (-want, +got): \n%s", diff)
+	}
+	// Current node is "foo"
+	if diff := cmp.Diff(expectedRoot.Children[0].Children[1], p.node); diff != "" {
+		t.Fatalf("AdoptSibling: p.node (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_AdoptSibling_empty(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	gotNode, gotErr := p.AdoptSibling()
-	var wantNode *Node[string]
-	wantErr := ErrMissingRequiredNode
-	if gotNode != wantNode {
-		t.Errorf("empty tree AdoptSibling node: want: %v, got: %v", wantNode, gotNode)
+	n, err := p.AdoptSibling()
+	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
+		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
 	}
-	if !errors.Is(gotErr, wantErr) {
-		t.Errorf("empty tree AdoptSibling err: want: %v, got: %v", wantErr, gotErr)
+
+	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
+		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_AdoptSibling_notfound(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
+	p.root = newTree(
+		&Node[string]{
+			Value: "op",
+			Children: []*Node[string]{
+				&Node[string]{
+					Value: "foo",
+				},
+			},
+		},
+	)
+	// Current node is "foo"
+	p.node = p.root.Children[0].Children[0]
 
-	p.Push("op")
-	p.Push("foo")
-
-	gotNode, gotErr := p.AdoptSibling()
-	var wantNode *Node[string]
-	wantErr := ErrMissingRequiredNode
-	if gotNode != wantNode {
-		t.Errorf("no sibling AdoptSibling node: want: %v, got: %v", wantNode, gotNode)
+	n, err := p.AdoptSibling()
+	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
+		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
 	}
-	if !errors.Is(gotErr, wantErr) {
-		t.Errorf("no sibling AdoptSibling err: want: %v, got: %v", wantErr, gotErr)
+
+	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
+		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_NextPeek(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
+	input := "A B C"
 	lexemes, cancel := testLexer(t, input)
 	defer cancel()
 
 	p := NewParser[string](lexemes)
 
 	// expect to read the first lexeme "A"
-	lexeme1 := p.Next()
-	if lexeme1 == nil {
-		t.Errorf("lexeme should not be nil")
-	} else {
-		got := lexeme1.Value
-		want := "A"
-		if got != want {
-			t.Errorf("lexeme match: want: %v, got: %v", want, got)
-		}
+	lexemeA := p.Next()
+	wantLexemeA := &Lexeme{
+		Type:   wordType,
+		Value:  "A",
+		Pos:    0,
+		Line:   0,
+		Column: 0,
+	}
+	if diff := cmp.Diff(wantLexemeA, lexemeA); diff != "" {
+		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
-	// expect to peek at second lexeme "B" without consuming it
-	lexeme2 := p.Peek()
-	if lexeme2 == nil {
-		t.Errorf("lexeme should not be nil")
-	} else {
-		got := lexeme2.Value
-		want := "B"
-		if got != want {
-			t.Errorf("lexeme match: want: %v, got: %v", want, got)
-		}
+	peekLexemeB := p.Peek()
+	wantLexemeB := &Lexeme{
+		Type:   wordType,
+		Value:  "B",
+		Pos:    2,
+		Line:   0,
+		Column: 2,
+	}
+	if diff := cmp.Diff(wantLexemeB, peekLexemeB); diff != "" {
+		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
 	// expect to read the second lexeme "B" because it was not consumed
-	lexeme3 := p.Next()
-	if lexeme3 == nil {
-		t.Errorf("lexeme should not be nil")
-	} else {
-		got := lexeme3.Value
-		want := "B"
-		if got != want {
-			t.Errorf("lexeme match: want: %v, got: %v", want, got)
-		}
+	lexemeB := p.Next()
+	if diff := cmp.Diff(wantLexemeB, lexemeB); diff != "" {
+		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
-	// expect to read the last lexeme "C"
-	lexeme4 := p.Next()
-	if lexeme4 == nil {
-		t.Errorf("lexeme should not be nil")
-	} else {
-		got := lexeme4.Value
-		want := "C"
-		if got != want {
-			t.Errorf("lexeme match: want: %v, got: %v", want, got)
-		}
+	lexemeC := p.Next()
+	wantLexemeC := &Lexeme{
+		Type:   wordType,
+		Value:  "C",
+		Pos:    4,
+		Line:   0,
+		Column: 4,
+	}
+	if diff := cmp.Diff(wantLexemeC, lexemeC); diff != "" {
+		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
 	// expected end of lexemes
-	lexeme5 := p.Next()
-	if lexeme5 != nil {
-		t.Errorf("lexeme should be nil")
+	nilLexeme := p.Next()
+	if diff := cmp.Diff((*Lexeme)(nil), nilLexeme); diff != "" {
+		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_Node(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	p.Node("1")
-	tree1 := p.Tree()
-
-	expected1 := newTree(
+	child1 := p.Node("A")
+	expectedRootA := newTree(
 		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "1",
-				},
-			},
+			Value: "A",
 		},
 	)
 
-	got, expErr := compareTrees[string](tree1, expected1)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
+	if diff := cmp.Diff(expectedRootA.Children[0], child1); diff != "" {
+		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
-	want := true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is still set to root.
+	if diff := cmp.Diff(p.root, p.node); diff != "" {
+		t.Errorf("p.node: (-want, +got): \n%s", diff)
 	}
 
-	p.Node("2")
-	tree2 := p.Tree()
-	debugPrintTreeNodes[string](0, tree2.Root)
-
-	expected2 := newTree(
+	child2 := p.Node("B")
+	expectedRootB := newTree(
 		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "1",
-				},
-				{
-					Value: "2",
-				},
-			},
+			Value: "A",
+		},
+		&Node[string]{
+			Value: "B",
 		},
 	)
 
-	got, expErr = compareTrees[string](tree2, expected2)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
+	if diff := cmp.Diff(expectedRootB.Children[1], child2); diff != "" {
+		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
-	want = true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is still set to root.
+	if diff := cmp.Diff(p.root, p.node); diff != "" {
+		t.Errorf("p.node: (-want, +got): \n%s", diff)
 	}
 
-	_ = p.Peek() // Peek should not affect the Node position.
-	p.Node("3")
-	tree3 := p.Tree()
-	debugPrintTreeNodes[string](0, tree3.Root)
-
-	expected3 := newTree(
-		&Node[string]{
-			Children: []*Node[string]{
-				{
-					Value: "1",
-				},
-				{
-					Value: "2",
-				},
-				{
-					Value: "3",
-				},
-			},
-		},
-	)
-
-	if diff := cmp.Diff(expected3, tree3); diff != "" {
-		t.Errorf("%v (-want, +got): \n%s", errTreeMismatchValue, diff)
+	if diff := cmp.Diff(expectedRootB, p.root); diff != "" {
+		t.Fatalf("Node: p.root (-want, +got): \n%s", diff)
 	}
 }
 
-func TestParser_Pop_root(t *testing.T) {
+func TestParser_ClimbPos(t *testing.T) {
 	t.Parallel()
 
 	p := NewParser[string](nil)
-	n := p.Pop()
-	tree := p.Tree()
-	expected := tree.Root
 
-	if diff := cmp.Diff(expected, n); diff != "" {
-		t.Errorf("Pop: (-want, +got): \n%s", diff)
-	}
-
-	expectedTree := newTree(&Node[string]{})
-	if diff := cmp.Diff(expectedTree, tree); diff != "" {
-		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
-	}
-
-	if diff := cmp.Diff(p.node, tree.Root); diff != "" {
-		t.Errorf("unexpected node (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_Pop(t *testing.T) {
-	t.Parallel()
-
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
-
-	p := NewParser[string](lexemes)
-
-	p.Push("1")
-	p.Pop()
-	p.Push("2")
-	p.Pop()
-	p.Push("3")
-	tree1 := p.Tree()
-	debugPrintTreeNodes[string](0, tree1.Root)
-
-	expected1 := newTree(
+	p.root = newTree(
 		&Node[string]{
+			Value: "A",
 			Children: []*Node[string]{
-				{
-					Value: "1",
-				},
-				{
-					Value: "2",
-				},
-				{
-					Value: "3",
+				&Node[string]{
+					Value: "B",
 				},
 			},
 		},
 	)
+	// Current node is Node B
+	p.node = p.root.Children[0].Children[0]
 
-	if diff := cmp.Diff(expected1, tree1); diff != "" {
-		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
+	// Climb returns Node B
+	if diff := cmp.Diff(p.root.Children[0].Children[0], p.Climb()); diff != "" {
+		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
-}
-
-func TestParser_Pos(t *testing.T) {
-	t.Parallel()
-
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
-
-	p := NewParser[string](lexemes)
-
-	p.Push("1")
-	got := p.Pos().Value
-	want := "1"
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is set to Node A
+	if diff := cmp.Diff(p.root.Children[0], p.node); diff != "" {
+		t.Errorf("p.node: (-want, +got): \n%s", diff)
+	}
+	// Pos returns Node A
+	if diff := cmp.Diff(p.root.Children[0], p.Pos()); diff != "" {
+		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
-	p.Push("2")
-	got = p.Pos().Value
-	want = "2"
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Climb returns Node A
+	if diff := cmp.Diff(p.root.Children[0], p.Climb()); diff != "" {
+		t.Errorf("Climb: (-want, +got): \n%s", diff)
+	}
+	// Current node is set to root node.
+	if diff := cmp.Diff(p.root, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Pos returns root node.
+	if diff := cmp.Diff(p.root, p.Pos()); diff != "" {
+		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
-	p.Push("3")
-	got = p.Pos().Value
-	want = "3"
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Climb returns root node.
+	if diff := cmp.Diff(p.root, p.Climb()); diff != "" {
+		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
-
-	p.Pop()
-	got = p.Pos().Value
-	want = "2"
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is set to root node.
+	if diff := cmp.Diff(p.root, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Pos returns root node.
+	if diff := cmp.Diff(p.root, p.Pos()); diff != "" {
+		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_Push(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	p.Push("1")
-	tree1 := p.Tree()
-
-	expected1 := newTree(
+	valA := "A"
+	expectedRootA := newTree(
 		&Node[string]{
+			Value: valA,
+		},
+	)
+	if diff := cmp.Diff(expectedRootA.Children[0], p.Push(valA)); diff != "" {
+		t.Errorf("Push(%q): (-want, +got): \n%s", valA, diff)
+	}
+	if diff := cmp.Diff(expectedRootA.Children[0], p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	if diff := cmp.Diff(expectedRootA, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
+	}
+
+	valB := "B"
+	expectedRootB := newTree(
+		&Node[string]{
+			Value: "A",
 			Children: []*Node[string]{
-				{
-					Value: "1",
+				&Node[string]{
+					Value: "B",
 				},
 			},
 		},
 	)
+	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.Push(valB)); diff != "" {
+		t.Errorf("Push(%q): (-want, +got): \n%s", valB, diff)
+	}
+	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	if diff := cmp.Diff(expectedRootB, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
+	}
+}
 
-	if diff := cmp.Diff(expected1, tree1); diff != "" {
-		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
+func TestParser_Replace(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+
+	p.root = newTree(
+		&Node[string]{
+			Value: "A",
+			Children: []*Node[string]{
+				&Node[string]{
+					Value: "B",
+				},
+			},
+		},
+	)
+	// Current node is Node A
+	p.node = p.root.Children[0]
+
+	// Replace Node A with C
+	valC := "C"
+	if diff := cmp.Diff("A", p.Replace(valC)); diff != "" {
+		t.Errorf("Replace(%q): (-want, +got): \n%s", valC, diff)
 	}
 
-	p.Push("2")
-	tree2 := p.Tree()
-
-	root2 := &Node[string]{}
-	tree2node1 := &Node[string]{
-		Parent: root2,
-		Value:  "1",
+	expectedRoot := newTree(
+		&Node[string]{
+			Value: "C",
+			Children: []*Node[string]{
+				&Node[string]{
+					Value: "B",
+				},
+			},
+		},
+	)
+	// Current node is set to Node C.
+	if diff := cmp.Diff(expectedRoot.Children[0], p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
-	root2.Children = append(root2.Children, tree2node1)
-
-	tree2node2 := &Node[string]{
-		Parent: tree2node1,
-		Value:  "2",
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
-	tree2node1.Children = append(tree2node1.Children, tree2node2)
-	expected2 := &Tree[string]{
-		Root: root2,
+}
+
+func TestParser_Replace_root(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+
+	// Replace root node with A
+	valA := "A"
+	if diff := cmp.Diff("", p.Replace(valA)); diff != "" {
+		t.Errorf("Replace(%q): (-want, +got): \n%s", valA, diff)
 	}
 
-	if diff := cmp.Diff(expected2, tree2); diff != "" {
-		t.Errorf("unexpected tree (-want, +got): \n%s", diff)
+	expectedRoot := &Node[string]{
+		Value: "A",
+	}
+
+	// Current node is set to root node.
+	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_RotateLeft(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	p.Push("op")
-	p.Node("1")
-	p.Node("2")
-	tree1 := p.Tree()
-	debugPrintTreeNodes[string](0, tree1.Root)
-
-	expected1 := newTree(
+	p.root = newTree(
 		&Node[string]{
+			Value: "A",
 			Children: []*Node[string]{
-				{
-					Value: "op",
+				&Node[string]{
+					Value: "A1",
+				},
+				&Node[string]{
+					Value: "A2",
 					Children: []*Node[string]{
-						{
-							Value: "1",
+						&Node[string]{
+							Value: "A2-1",
 						},
-						{
-							Value: "2",
+						&Node[string]{
+							Value: "A2-2",
+						},
+					},
+				},
+			},
+		},
+	)
+	// Current node is Node A2
+	p.node = p.root.Children[0].Children[1]
+
+	n, err := p.RotateLeft()
+
+	if diff := cmp.Diff(nil, err); diff != "" {
+		t.Fatalf("RotateLeft: err (-want, +got): \n%s", diff)
+	}
+
+	// Expect that A2 is rotated above A.
+	expectedRoot := newTree(
+		&Node[string]{
+			Value: "A2",
+			Children: []*Node[string]{
+				&Node[string]{
+					Value: "A2-1",
+				},
+				&Node[string]{
+					Value: "A2-2",
+				},
+				&Node[string]{
+					Value: "A",
+					Children: []*Node[string]{
+						&Node[string]{
+							Value: "A1",
 						},
 					},
 				},
@@ -727,49 +574,61 @@ func TestParser_RotateLeft(t *testing.T) {
 		},
 	)
 
-	got, expErr := compareTrees[string](tree1, expected1)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
+	// The new parent Node A2 is returned.
+	if diff := cmp.Diff(expectedRoot.Children[0], n); diff != "" {
+		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
 	}
-	want := true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is set to A2
+	if diff := cmp.Diff(expectedRoot.Children[0], p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
+	}
+}
 
-	p.Push("foo")
-	rotNode, rotErr := p.RotateLeft()
-	wantNode := p.Pos()
-	var wantErr error
-	if rotNode != wantNode {
-		t.Errorf("RotateLeft node: want: %v, got: %v", wantNode, rotNode)
-	}
-	if !errors.Is(rotErr, wantErr) {
-		t.Errorf("RotateLeft err: want: %v, got: %v", wantErr, rotErr)
-	}
+func TestParser_RotateLeft_root(t *testing.T) {
+	t.Parallel()
 
-	p.Node("3")
-	tree2 := p.Tree()
-	debugPrintTreeNodes[string](0, tree2.Root)
+	p := NewParser[string](nil)
 
-	expected2 := newTree(
+	p.root = newTree(
 		&Node[string]{
+			Value: "A",
 			Children: []*Node[string]{
-				{
-					Value: "foo",
+				&Node[string]{
+					Value: "B",
+				},
+			},
+		},
+		&Node[string]{
+			Value: "C",
+		},
+	)
+	// Current node is Node A
+	p.node = p.root.Children[0]
+
+	n, err := p.RotateLeft()
+
+	if diff := cmp.Diff(nil, err); diff != "" {
+		t.Fatalf("RotateLeft: err (-want, +got): \n%s", diff)
+	}
+
+	// Expect that A is the new root node and the old root node has been
+	// rotated under it.
+	expectedRoot := addParent(
+		&Node[string]{
+			Value: "A",
+			Children: []*Node[string]{
+				&Node[string]{
+					Value: "B",
+				},
+				&Node[string]{
+					Value: "", // Default root node's value.
 					Children: []*Node[string]{
-						{
-							Value: "op",
-							Children: []*Node[string]{
-								{
-									Value: "1",
-								},
-								{
-									Value: "2",
-								},
-							},
-						},
-						{
-							Value: "3",
+						&Node[string]{
+							Value: "C",
 						},
 					},
 				},
@@ -777,32 +636,30 @@ func TestParser_RotateLeft(t *testing.T) {
 		},
 	)
 
-	got, expErr = compareTrees[string](tree2, expected2)
-	if expErr != nil {
-		t.Errorf("error expected trees do not match: %s", expErr)
+	// Node A is returned.
+	if diff := cmp.Diff(expectedRoot, n); diff != "" {
+		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
 	}
-	want = true
-	if got != want {
-		t.Errorf("trees match: want: %v, got: %v", want, got)
+	// Current node is set to A
+	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_RotateLeft_empty(t *testing.T) {
 	t.Parallel()
 
-	input := inputABC
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	p := NewParser[string](nil)
 
-	p := NewParser[string](lexemes)
-
-	gotNode, gotErr := p.RotateLeft()
-	var wantNode *Node[string]
-	wantErr := ErrMissingRequiredNode
-	if gotNode != wantNode {
-		t.Errorf("empty tree RotateLeft node: want: %v, got: %v", wantNode, gotNode)
+	n, err := p.RotateLeft()
+	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
+		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
 	}
-	if !errors.Is(gotErr, wantErr) {
-		t.Errorf("empty tree RotateLeft err: want: %v, got: %v", wantErr, gotErr)
+	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
+		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
 	}
 }

@@ -163,9 +163,9 @@ func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 }
 
 // execute executes the template with the given data.
-func execute(t *lexparse.Tree[*tmplNode], data map[string]string) (string, error) {
+func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, error) {
 	var b strings.Builder
-	for _, n := range t.Root.Children {
+	for _, n := range root.Children {
 		switch n.Value.typ {
 		case textNodeType:
 			// Write raw text to the output.

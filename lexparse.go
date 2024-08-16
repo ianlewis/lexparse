@@ -21,19 +21,20 @@ import (
 	"errors"
 )
 
-// LexParse runs the Lexer passing lexemes to the parser functions.
+// LexParse lexes the content starting at initState and passes the results to a
+// parser starting at initFn. The resulting root node of the parse tree is returned.
 func LexParse[V comparable](
 	ctx context.Context,
 	r BufferedRuneReader,
 	initState State,
 	initFn ParseFn[V],
-) (*Tree[V], error) {
+) (*Node[V], error) {
 	l := NewLexer(r, initState)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	p := NewParser[V](l.Lex(ctx))
-	t, pErr := p.Parse(ctx, initFn)
+	n, pErr := p.Parse(ctx, initFn)
 	cancel()
 
 	<-l.Done()
@@ -50,5 +51,5 @@ func LexParse[V comparable](
 		err = pErr
 	}
 
-	return t, err
+	return n, err
 }

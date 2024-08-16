@@ -63,21 +63,16 @@ func TestLexParse(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 
-		want := &Tree[string]{
-			Root: &Node[string]{},
-		}
-		want.Root.Children = append(want.Root.Children,
+		expectedRoot := newTree(
 			&Node[string]{
-				Value:  "Hello",
-				Parent: want.Root,
+				Value: "Hello",
 			},
 			&Node[string]{
-				Value:  "World!",
-				Parent: want.Root,
+				Value: "World!",
 			},
 		)
 
-		if diff := cmp.Diff(want, got); diff != "" {
+		if diff := cmp.Diff(expectedRoot, got); diff != "" {
 			t.Errorf("unexpected output (-want +got):\n%s", diff)
 		}
 	})

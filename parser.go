@@ -24,12 +24,6 @@ import (
 // perform an operation.
 var ErrMissingRequiredNode = errors.New("missing required node")
 
-// Tree is the parse tree data structure.
-type Tree[V comparable] struct {
-	// Root points to the root Node in the parse tree.
-	Root *Node[V]
-}
-
 // Node is the structure for a single node in the parse tree.
 type Node[V comparable] struct {
 	Parent   *Node[V]
@@ -56,15 +50,14 @@ type Node[V comparable] struct {
 // nil is returned.
 type ParseFn[V comparable] func(context.Context, *Parser[V]) (ParseFn[V], error)
 
-// NewParser creates a new Parser that reads from the lexemes channel.
+// NewParser creates a new Parser that reads from the lexemes channel. The
+// parser is initialized with a root node with an empty value.
 func NewParser[V comparable](lexemes <-chan *Lexeme) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
 		lexemes: lexemes,
-		tree: &Tree[V]{
-			Root: root,
-		},
-		node: root,
+		root:    root,
+		node:    root,
 	}
 	return p
 }
@@ -73,7 +66,9 @@ func NewParser[V comparable](lexemes <-chan *Lexeme) *Parser[V] {
 type Parser[V comparable] struct {
 	lexemes <-chan *Lexeme
 
-	tree *Tree[V]
+	// root is the root node of the parse tree.
+	root *Node[V]
+
 	// node is the current node under processing.
 	node *Node[V]
 
@@ -85,14 +80,14 @@ type Parser[V comparable] struct {
 // takes cxt and the Parser as arguments and returns the parseFn and
 // an error. The parse tree is built when parseFn returns nil for the
 // parseFn. Parsing can be cancelled by ctx.
-func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Tree[V], error) {
+func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Node[V], error) {
 	for {
 		if parseFn == nil {
 			break
 		}
 		select {
 		case <-ctx.Done():
-			return p.Tree(), ctx.Err()
+			return p.root, ctx.Err()
 		default:
 		}
 
@@ -103,15 +98,15 @@ func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Tree[V], er
 				break
 			}
 
-			return p.Tree(), err
+			return p.root, err
 		}
 	}
-	return p.Tree(), nil
+	return p.root, nil
 }
 
-// Tree returns the parse Tree.
-func (p *Parser[V]) Tree() *Tree[V] {
-	return p.tree
+// Root returns the root of the parse tree.
+func (p *Parser[V]) Root() *Node[V] {
+	return p.root
 }
 
 // Peek returns the next Lexeme from the lexer without consuming it.
@@ -134,22 +129,32 @@ func (p *Parser[V]) Next() *Lexeme {
 	return l
 }
 
-// Pos returns the current node position in the tree.
+// Pos returns the current node position in the tree. May return nil if a root
+// node has not been created.
 func (p *Parser[V]) Pos() *Node[V] {
 	return p.node
 }
 
 // Push creates a new node, adds it as a child to the current node, and sets it
-// as the current node.
+// as the current node. The new node is returned.
 func (p *Parser[V]) Push(v V) *Node[V] {
 	n := p.Node(v)
 	p.node = n
 	return n
 }
 
-// Node creates a new node and adds it as a child to the current node.
+// Node creates a new node at the current lexeme position and adds it as a
+// child to the current node.
 func (p *Parser[V]) Node(v V) *Node[V] {
-	cur := p.Pos()
+	n := p.newNode(v)
+	n.Parent = p.node
+	p.node.Children = append(p.node.Children, n)
+	return n
+}
+
+// newNode creates a new node at the current lexeme position and returns it
+// without adding it to the tree.
+func (p *Parser[V]) newNode(v V) *Node[V] {
 	var pos, line, col int
 	if p.lexeme != nil {
 		pos = p.lexeme.Pos
@@ -157,26 +162,58 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 		col = p.lexeme.Column
 	}
 
-	node := &Node[V]{
-		Parent: p.Pos(),
+	return &Node[V]{
 		Value:  v,
 		Pos:    pos,
 		Line:   line,
 		Column: col,
 	}
-	cur.Children = append(cur.Children, node)
-	return node
 }
 
-// Pop updates the current node position to the current node's parent
+// Climb updates the current node position to the current node's parent
 // returning the previous current node. It is a no-op that returns the root
 // node if called on the root node.
-func (p *Parser[V]) Pop() *Node[V] {
+func (p *Parser[V]) Climb() *Node[V] {
 	n := p.node
 	if p.node.Parent != nil {
 		p.node = p.node.Parent
 	}
 	return n
+}
+
+// Replace replaces the current node with a new node with the given value. The
+// old node is removed from the tree and it's value is returned. Can be used to
+// replace the root node.
+func (p *Parser[V]) Replace(v V) V {
+	n := p.newNode(v)
+
+	// Replace the parent.
+	n.Parent = p.node.Parent
+	if n.Parent != nil {
+		for i := range n.Parent.Children {
+			if n.Parent.Children[i] == p.node {
+				n.Parent.Children[i] = n
+				break
+			}
+		}
+	}
+
+	// Replace children. Preserve nil,non-nil slice.
+	if p.node.Children != nil {
+		n.Children = make([]*Node[V], len(p.node.Children))
+		for i := range p.node.Children {
+			n.Children[i] = p.node.Children[i]
+			n.Children[i].Parent = n
+		}
+	}
+
+	if p.node == p.root {
+		p.root = n
+	}
+	oldVal := p.node.Value
+	p.node = n
+
+	return oldVal
 }
 
 // RotateLeft restructures the tree by moving the current node to the
@@ -185,6 +222,9 @@ func (p *Parser[V]) Pop() *Node[V] {
 // parent remain unchanged, except for the current node which becomes
 // the new parent. If RotateLeft is called on the root node then
 // ErrMissingRequiredNode is returned.
+//
+// Note that the default empty root node may be rotated if RotateLeft is called
+// on a child node of the root node..
 func (p *Parser[V]) RotateLeft() (*Node[V], error) {
 	// n = node , op = original parent , gp = grand parent
 	n := p.node
@@ -228,8 +268,8 @@ func (p *Parser[V]) RotateLeft() (*Node[V], error) {
 	}
 
 	// Update the tree root if needed
-	if p.Tree().Root == op {
-		p.Tree().Root = n
+	if p.root == op {
+		p.root = n
 	}
 
 	return n, nil
