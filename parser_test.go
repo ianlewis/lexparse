@@ -16,7 +16,6 @@ package lexparse
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -24,8 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/ianlewis/runeio"
 )
-
-var errTreeMismatchValue = errors.New("trees node values do not match")
 
 func newTree[V comparable](n ...*Node[V]) *Node[V] {
 	root := &Node[V]{}

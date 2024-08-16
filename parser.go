@@ -87,6 +87,7 @@ func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Node[V], er
 		}
 		select {
 		case <-ctx.Done():
+			//nolint:wrapcheck // We don't need to wrap the context Error.
 			return p.root, ctx.Err()
 		default:
 		}
