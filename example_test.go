@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/ianlewis/runeio"
@@ -36,8 +37,9 @@ const (
 )
 
 var (
-	errType   = errors.New("unexpected type")
-	errSymbol = errors.New("invalid symbol")
+	errType           = errors.New("unexpected type")
+	errUnclosedAction = errors.New("unclosed action")
+	errSymbol         = errors.New("invalid symbol")
 )
 
 type nodeType int
@@ -53,8 +55,8 @@ type tmplNode struct {
 	text   string
 }
 
-// stateText parses normal text.
-func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+// lexText tokenizes normal text.
+func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Search the input for left brackets.
 	token, err := l.Find([]string{actionLeft})
 
@@ -67,7 +69,7 @@ func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Progress to lexing the action if brackets are found.
 	var nextState lexparse.State
 	if token == actionLeft {
-		nextState = lexparse.StateFn(stateAction)
+		nextState = lexparse.StateFn(lexAction)
 	}
 
 	if err != nil {
@@ -77,8 +79,8 @@ func stateText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	return nextState, nil
 }
 
-// stateAction lexes replacement actions (e.g. {{ var }}).
-func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+// lexAction tokenizes replacement actions (e.g. {{ var }}).
+func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Discard the left brackets
 	if _, err := l.Discard(len(actionLeft)); err != nil {
 		return nil, fmt.Errorf("lexing action: %w", err)
@@ -92,6 +94,7 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	if token == actionRight {
 		// Emit the lexeme.
 		lexeme := l.Lexeme(actionType)
+
 		if strings.TrimSpace(lexeme.Value) != "" {
 			l.Emit(lexeme)
 		}
@@ -100,10 +103,14 @@ func stateAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 		if _, errDiscard := l.Discard(len(actionRight)); errDiscard != nil {
 			return nil, fmt.Errorf("lexing action: %w", errDiscard)
 		}
-		nextState = lexparse.StateFn(stateText)
+		nextState = lexparse.StateFn(lexText)
 	}
 
 	if err != nil {
+		// Don't wrap EOF since it's unexpected.
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%w: line %d, column %d", errUnclosedAction, l.Line()+1, l.Column()+1)
+		}
 		return nextState, fmt.Errorf("lexing action: %w", err)
 	}
 
@@ -153,7 +160,7 @@ func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 	}
 
 	// Emit an action (variable) node.
-	p.Node(&tmplNode{
+	_ = p.Node(&tmplNode{
 		typ:    actionNodeType,
 		action: strings.TrimSpace(l.Value),
 	})
@@ -174,7 +181,9 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 			// Replace templated variables with given data.
 			val, ok := data[n.Value.action]
 			if !ok {
-				return b.String(), fmt.Errorf("%w: %q", errSymbol, n.Value.action)
+				fmt.Println(fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line+1, n.Column+1))
+				// return b.String(), fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line, n.Column)
+				return b.String(), nil
 			}
 			b.WriteString(val)
 		}
@@ -182,18 +191,27 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 	return b.String(), nil
 }
 
-// ExampleLexParse implements a simple templating language.
-func ExampleLexParse() {
-	r := runeio.NewReader(strings.NewReader("Hello {{ subject }}!"))
-	t, err := lexparse.LexParse(context.Background(), r, lexparse.StateFn(stateText), parseInit)
+// Example_templateEngine implements a simple text templating language. The
+// language // replaces variables identified with double brackets
+// (e.g. `{{ var }}`) with // data values for those variables.
+//
+// LexParse is used to lex and parse the template into a parse tree. This tree
+// can be passed with a data map to the execute function to interpret the template
+// and retrieve a final result.
+//
+// This example includes some best practices for error handling, such as
+// including line and column numbers in error messages.
+func Example_templateEngine() {
+	r := runeio.NewReader(strings.NewReader("Hello, {{ subject }}"))
+	t, err := lexparse.LexParse(context.Background(), r, lexparse.StateFn(lexText), parseInit)
 	if err != nil {
 		panic(err)
 	}
-	txt, err := execute(t, map[string]string{"subject": "World"})
+	txt, err := execute(t, map[string]string{"subject": "世界"})
 	if err != nil {
 		panic(err)
 	}
 	fmt.Print(txt)
 
-	// Output: Hello World!
+	// Output: Hello, 世界
 }
