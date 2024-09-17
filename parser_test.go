@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/ianlewis/runeio"
 )
 
@@ -135,108 +134,6 @@ func TestParser_parse_op2(t *testing.T) {
 
 	if diff := cmp.Diff(expectedRoot, root); diff != "" {
 		t.Fatalf("Parse: root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_AdoptSibling(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = newTree(
-		&Node[string]{
-			Value: "op",
-			Children: []*Node[string]{
-				{
-					Value: "1",
-				},
-				{
-					Value: "2",
-				},
-				{
-					Value: "foo",
-				},
-			},
-		},
-	)
-	// Current node is "foo"
-	p.node = p.root.Children[0].Children[2]
-
-	// expected tree after AdoptSibling
-	expectedRoot := newTree(&Node[string]{
-		Value: "op",
-		Children: []*Node[string]{
-			{
-				Value: "1",
-			},
-			{
-				Value: "foo",
-				Children: []*Node[string]{
-					{
-						Value: "2",
-					},
-				},
-			},
-		},
-	})
-
-	n, err := p.AdoptSibling()
-	if diff := cmp.Diff(nil, err); diff != "" {
-		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
-	}
-	if diff := cmp.Diff(n, expectedRoot.Children[0].Children[1]); diff != "" {
-		t.Fatalf("AdoptSibling: (-want, +got): \n%s", diff)
-	}
-
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Fatalf("AdoptSibling: p.root (-want, +got): \n%s", diff)
-	}
-	// Current node is "foo"
-	if diff := cmp.Diff(expectedRoot.Children[0].Children[1], p.node); diff != "" {
-		t.Fatalf("AdoptSibling: p.node (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_AdoptSibling_empty(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	n, err := p.AdoptSibling()
-	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
-		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
-	}
-
-	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
-		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_AdoptSibling_notfound(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = newTree(
-		&Node[string]{
-			Value: "op",
-			Children: []*Node[string]{
-				{
-					Value: "foo",
-				},
-			},
-		},
-	)
-	// Current node is "foo"
-	p.node = p.root.Children[0].Children[0]
-
-	n, err := p.AdoptSibling()
-	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
-		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
-	}
-
-	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
-		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
 	}
 }
 
@@ -519,50 +416,19 @@ func TestParser_RotateLeft(t *testing.T) {
 
 	p.root = newTree(
 		&Node[string]{
-			Value: "A",
+			Value: "P",
 			Children: []*Node[string]{
-				{
-					Value: "A1",
-				},
-				{
-					Value: "A2",
-					Children: []*Node[string]{
-						{
-							Value: "A2-1",
-						},
-						{
-							Value: "A2-2",
-						},
-					},
-				},
-			},
-		},
-	)
-	// Current node is Node A2
-	p.node = p.root.Children[0].Children[1]
-
-	n, err := p.RotateLeft()
-
-	if diff := cmp.Diff(nil, err); diff != "" {
-		t.Fatalf("RotateLeft: err (-want, +got): \n%s", diff)
-	}
-
-	// Expect that A2 is rotated above A.
-	expectedRoot := newTree(
-		&Node[string]{
-			Value: "A2",
-			Children: []*Node[string]{
-				{
-					Value: "A2-1",
-				},
-				{
-					Value: "A2-2",
-				},
 				{
 					Value: "A",
+				},
+				{
+					Value: "Q",
 					Children: []*Node[string]{
 						{
-							Value: "A1",
+							Value: "B",
+						},
+						{
+							Value: "C",
 						},
 					},
 				},
@@ -570,12 +436,43 @@ func TestParser_RotateLeft(t *testing.T) {
 		},
 	)
 
-	// The new parent Node A2 is returned.
-	if diff := cmp.Diff(expectedRoot.Children[0], n); diff != "" {
+	// Current node is Node P
+	p.node = p.root.Children[0]
+
+	newSubRoot := p.RotateLeft()
+
+	// Expect that Q is rotated above P.
+	expectedRoot := newTree(
+		&Node[string]{
+			Value: "Q",
+			Children: []*Node[string]{
+				{
+					Value: "P",
+					Children: []*Node[string]{
+						{
+							Value: "A",
+						},
+						{
+							Value: "B",
+						},
+					},
+				},
+				{
+					Value: "C",
+				},
+			},
+		},
+	)
+	expectedSubRoot := expectedRoot.Children[0]
+
+	// TODO: Check parents of each node.
+
+	// The new parent Node Q is returned.
+	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
 		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
 	}
-	// Current node is set to A2
-	if diff := cmp.Diff(expectedRoot.Children[0], p.node); diff != "" {
+	// Current node is set to Q
+	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
@@ -589,40 +486,19 @@ func TestParser_RotateLeft_root(t *testing.T) {
 
 	p := NewParser[string](nil)
 
-	p.root = newTree(
+	p.root = addParent(
 		&Node[string]{
-			Value: "A",
+			Value: "P",
 			Children: []*Node[string]{
 				{
-					Value: "B",
-				},
-			},
-		},
-		&Node[string]{
-			Value: "C",
-		},
-	)
-	// Current node is Node A
-	p.node = p.root.Children[0]
-
-	n, err := p.RotateLeft()
-
-	if diff := cmp.Diff(nil, err); diff != "" {
-		t.Fatalf("RotateLeft: err (-want, +got): \n%s", diff)
-	}
-
-	// Expect that A is the new root node and the old root node has been
-	// rotated under it.
-	expectedRoot := addParent(
-		&Node[string]{
-			Value: "A",
-			Children: []*Node[string]{
-				{
-					Value: "B",
+					Value: "A",
 				},
 				{
-					Value: "", // Default root node's value.
+					Value: "Q",
 					Children: []*Node[string]{
+						{
+							Value: "B",
+						},
 						{
 							Value: "C",
 						},
@@ -631,17 +507,46 @@ func TestParser_RotateLeft_root(t *testing.T) {
 			},
 		},
 	)
+	// Current node is Node P
+	p.node = p.root
 
-	// Node A is returned.
-	if diff := cmp.Diff(expectedRoot, n); diff != "" {
+	newSubRoot := p.RotateLeft()
+
+	// Expect that Q is rotated above P.
+	expectedSubRoot := addParent(
+		&Node[string]{
+			Value: "Q",
+			Children: []*Node[string]{
+				{
+					Value: "P",
+					Children: []*Node[string]{
+						{
+							Value: "A",
+						},
+						{
+							Value: "B",
+						},
+					},
+				},
+				{
+					Value: "C",
+				},
+			},
+		},
+	)
+
+	// TODO: Check parents of each node.
+
+	// The new parent Node Q is returned.
+	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
 		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
 	}
-	// Current node is set to A
-	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
+	// Current node is set to Q
+	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+	if diff := cmp.Diff(expectedSubRoot, p.root); diff != "" {
 		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
 }
@@ -651,11 +556,10 @@ func TestParser_RotateLeft_empty(t *testing.T) {
 
 	p := NewParser[string](nil)
 
-	n, err := p.RotateLeft()
-	if diff := cmp.Diff(ErrMissingRequiredNode, err, cmpopts.EquateErrors()); diff != "" {
-		t.Fatalf("AdoptSibling: err (-want, +got): \n%s", diff)
-	}
-	if diff := cmp.Diff((*Node[string])(nil), n); diff != "" {
+	n := p.RotateLeft()
+	if diff := cmp.Diff(p.node, n); diff != "" {
 		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
 	}
 }
+
+// TODO: RotateRight tests
