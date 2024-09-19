@@ -267,7 +267,7 @@ func (p *Parser[V]) RotateLeft() *Node[V] {
 	// potential sub-trees.
 	/*
 	 *      P                       Q
-	 *  /       \               /		\
+	 *  /       \               /       \
 	 *  A       Q       ->      P       C
 	 *      /       \       /       \
 	 *      B       C       A       B
@@ -295,6 +295,7 @@ func (p *Parser[V]) RotateLeft() *Node[V] {
 			if subRootParent.Children[i] == subRoot {
 				subRootParent.Children[i] = q
 				q.Parent = subRootParent
+				break
 			}
 		}
 	} else {
@@ -321,7 +322,7 @@ func (p *Parser[V]) RotateRight() *Node[V] {
 	// potential sub-trees.
 	/*
 	 *          P                       Q
-	 *      /       \               /		\
+	 *      /       \               /       \
 	 *      Q       C       ->      A       P
 	 *  /       \                       /       \
 	 *  A       B                       B       C
@@ -350,6 +351,7 @@ func (p *Parser[V]) RotateRight() *Node[V] {
 			if subRootParent.Children[i] == subRoot {
 				subRootParent.Children[i] = q
 				q.Parent = subRootParent
+				break
 			}
 		}
 	} else {
