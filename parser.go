@@ -20,10 +20,6 @@ import (
 	"io"
 )
 
-// ErrMissingRequiredNode means the tree is missing nodes required to
-// perform an operation.
-var ErrMissingRequiredNode = errors.New("missing required node")
-
 // Node is the structure for a single node in the parse tree.
 type Node[V comparable] struct {
 	Parent   *Node[V]
