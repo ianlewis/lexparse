@@ -17,7 +17,6 @@ package lexparse
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -366,15 +365,4 @@ func (p *Parser[V]) RotateRight() *Node[V] {
 	}
 
 	return p.node
-}
-
-// TODO: Remove
-func printNode[V comparable](n *Node[V], depth int) {
-	fmt.Printf("%v\n", n.Value)
-	for _, c := range n.Children {
-		for i := 0; i < depth+1; i++ {
-			fmt.Print("\t")
-		}
-		printNode(c, depth+1)
-	}
 }

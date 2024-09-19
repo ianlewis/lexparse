@@ -465,8 +465,6 @@ func TestParser_RotateLeft(t *testing.T) {
 	)
 	expectedSubRoot := expectedRoot.Children[0]
 
-	// TODO: Check parents of each node.
-
 	// The new parent Node Q is returned.
 	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
 		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
@@ -535,8 +533,6 @@ func TestParser_RotateLeft_root(t *testing.T) {
 		},
 	)
 
-	// TODO: Check parents of each node.
-
 	// The new parent Node Q is returned.
 	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
 		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
@@ -558,8 +554,155 @@ func TestParser_RotateLeft_empty(t *testing.T) {
 
 	n := p.RotateLeft()
 	if diff := cmp.Diff(p.node, n); diff != "" {
-		t.Fatalf("AdoptSibling: n (-want, +got): \n%s", diff)
+		t.Fatalf("RotateLeft: n (-want, +got): \n%s", diff)
 	}
 }
 
-// TODO: RotateRight tests
+func TestParser_RotateRight(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+
+	p.root = newTree(
+		&Node[string]{
+			Value: "P",
+			Children: []*Node[string]{
+				{
+					Value: "Q",
+					Children: []*Node[string]{
+						{
+							Value: "A",
+						},
+						{
+							Value: "B",
+						},
+					},
+				},
+				{
+					Value: "C",
+				},
+			},
+		},
+	)
+
+	// Current node is Node P
+	p.node = p.root.Children[0]
+
+	newSubRoot := p.RotateRight()
+
+	// Expect that Q is rotated above P.
+	expectedRoot := newTree(
+		&Node[string]{
+			Value: "Q",
+			Children: []*Node[string]{
+				{
+					Value: "A",
+				},
+				{
+					Value: "P",
+					Children: []*Node[string]{
+						{
+							Value: "B",
+						},
+						{
+							Value: "C",
+						},
+					},
+				},
+			},
+		},
+	)
+	expectedSubRoot := expectedRoot.Children[0]
+
+	// The new parent Node Q is returned.
+	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
+		t.Fatalf("RotateRight: (-want, +got): \n%s", diff)
+	}
+	// Current node is set to Q
+	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
+	}
+}
+
+func TestParser_RotateRight_root(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+
+	p.root = addParent(
+		&Node[string]{
+			Value: "P",
+			Children: []*Node[string]{
+				{
+					Value: "Q",
+					Children: []*Node[string]{
+						{
+							Value: "A",
+						},
+						{
+							Value: "B",
+						},
+					},
+				},
+				{
+					Value: "C",
+				},
+			},
+		},
+	)
+	// Current node is Node P
+	p.node = p.root
+
+	newSubRoot := p.RotateRight()
+
+	// Expect that Q is rotated above P.
+	expectedSubRoot := addParent(
+		&Node[string]{
+			Value: "Q",
+			Children: []*Node[string]{
+				{
+					Value: "A",
+				},
+				{
+					Value: "P",
+					Children: []*Node[string]{
+						{
+							Value: "B",
+						},
+						{
+							Value: "C",
+						},
+					},
+				},
+			},
+		},
+	)
+
+	// The new parent Node Q is returned.
+	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
+		t.Fatalf("RotateRight: (-want, +got): \n%s", diff)
+	}
+	// Current node is set to Q
+	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
+		t.Errorf("p.node (-want, +got): \n%s", diff)
+	}
+	// Full tree has expected values.
+	if diff := cmp.Diff(expectedSubRoot, p.root); diff != "" {
+		t.Errorf("p.root (-want, +got): \n%s", diff)
+	}
+}
+
+func TestParser_RotateRight_empty(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser[string](nil)
+
+	n := p.RotateRight()
+	if diff := cmp.Diff(p.node, n); diff != "" {
+		t.Fatalf("RotateRight: n (-want, +got): \n%s", diff)
+	}
+}
