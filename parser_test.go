@@ -706,3 +706,71 @@ func TestParser_RotateRight_empty(t *testing.T) {
 		t.Fatalf("RotateRight: n (-want, +got): \n%s", diff)
 	}
 }
+
+func TestParser_SetLeft(t *testing.T) {
+	t.Parallel()
+
+	root := &Node[string]{Value: "root"}
+	left := &Node[string]{Value: "left"}
+	newLeft := &Node[string]{Value: "newLeft"}
+
+	oldLeft := root.SetLeft(left)
+	if oldLeft != nil {
+		t.Errorf("oldLeft: want nil got %v", oldLeft)
+	}
+
+	if root.Left() != left {
+		t.Errorf("root.Left(): want %v got %v", left, root.Left())
+	}
+
+	if left.Parent != root {
+		t.Errorf("left.Parent: want %v got %v", root, left.Parent)
+	}
+
+	oldLeft = root.SetLeft(newLeft)
+	if oldLeft != left {
+		t.Errorf("oldLeft: want %v got %v", left, oldLeft)
+	}
+
+	if root.Left() != newLeft {
+		t.Errorf("root.Left(): want %v got %v", newLeft, root.Left())
+	}
+
+	if newLeft.Parent != root {
+		t.Errorf("newLeft.Parent: want %v got %v", root, newLeft.Parent)
+	}
+}
+
+func TestParser_SetRight(t *testing.T) {
+	t.Parallel()
+
+	root := &Node[string]{Value: "root"}
+	right := &Node[string]{Value: "right"}
+	newRight := &Node[string]{Value: "newRight"}
+
+	oldRight := root.SetRight(right)
+	if oldRight != nil {
+		t.Errorf("oldRight: want nil got %v", oldRight)
+	}
+
+	if root.Right() != right {
+		t.Errorf("root.Right(): want %v got %v", right, root.Right())
+	}
+
+	if right.Parent != root {
+		t.Errorf("right.Parent: want %v got %v", root, right.Parent)
+	}
+
+	oldRight = root.SetRight(newRight)
+	if oldRight != right {
+		t.Errorf("oldRight: want %v got %v", right, oldRight)
+	}
+
+	if root.Right() != newRight {
+		t.Errorf("root.Right(): want %v got %v", newRight, root.Right())
+	}
+
+	if newRight.Parent != root {
+		t.Errorf("newRight.Parent: want %v got %v", root, newRight.Parent)
+	}
+}
