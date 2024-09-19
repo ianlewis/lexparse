@@ -707,7 +707,7 @@ func TestParser_RotateRight_empty(t *testing.T) {
 	}
 }
 
-func TestParser_SetLeft(t *testing.T) {
+func TestNode_SetLeft(t *testing.T) {
 	t.Parallel()
 
 	root := &Node[string]{Value: "root"}
@@ -741,7 +741,7 @@ func TestParser_SetLeft(t *testing.T) {
 	}
 }
 
-func TestParser_SetRight(t *testing.T) {
+func TestNode_SetRight(t *testing.T) {
 	t.Parallel()
 
 	root := &Node[string]{Value: "root"}
