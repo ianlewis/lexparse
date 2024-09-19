@@ -80,17 +80,6 @@ func (p *Node[V]) SetRight(r *Node[V]) *Node[V] {
 	return old
 }
 
-// ReplaceChild replaces the first given node with another node. The inserted
-// node's parent is updated. The removed node's parent is not updated.
-func (p *Node[V]) ReplaceChild(l, r *Node[V]) {
-	for i := range p.Children {
-		if p.Children[i] == l {
-			p.Children[i] = r
-			r.Parent = p
-		}
-	}
-}
-
 // ParseFn is the signature for the parsing function used to build the
 // parse tree from lexemes. The parsing function is passed to
 // Parse().
@@ -302,7 +291,12 @@ func (p *Parser[V]) RotateLeft() *Node[V] {
 
 	// Update the sub-root's parent.
 	if subRootParent != nil {
-		subRootParent.ReplaceChild(subRoot, q)
+		for i := range subRootParent.Children {
+			if subRootParent.Children[i] == subRoot {
+				subRootParent.Children[i] = q
+				q.Parent = subRootParent
+			}
+		}
 	} else {
 		q.Parent = nil
 	}
@@ -352,7 +346,12 @@ func (p *Parser[V]) RotateRight() *Node[V] {
 
 	// Update the sub-root's parent.
 	if subRootParent != nil {
-		subRootParent.ReplaceChild(subRoot, q)
+		for i := range subRootParent.Children {
+			if subRootParent.Children[i] == subRoot {
+				subRootParent.Children[i] = q
+				q.Parent = subRootParent
+			}
+		}
 	} else {
 		q.Parent = nil
 	}
