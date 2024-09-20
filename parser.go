@@ -20,10 +20,6 @@ import (
 	"io"
 )
 
-// ErrMissingRequiredNode means the tree is missing nodes required to
-// perform an operation.
-var ErrMissingRequiredNode = errors.New("missing required node")
-
 // Node is the structure for a single node in the parse tree.
 type Node[V comparable] struct {
 	Parent   *Node[V]
@@ -38,6 +34,46 @@ type Node[V comparable] struct {
 
 	// Column is the column in the line of the input where the value was found.
 	Column int
+}
+
+// Left returns the left child in the case of a binary tree.
+func (p *Node[V]) Left() *Node[V] {
+	if len(p.Children) > 0 {
+		return p.Children[0]
+	}
+	return nil
+}
+
+// SetLeft sets the left child in the case of a binary tree and returns the
+// previous value.
+func (p *Node[V]) SetLeft(l *Node[V]) *Node[V] {
+	for len(p.Children) < 1 {
+		p.Children = append(p.Children, nil)
+	}
+	old := p.Children[0]
+	p.Children[0] = l
+	l.Parent = p
+	return old
+}
+
+// Right returns the right child in the case of a binary tree.
+func (p *Node[V]) Right() *Node[V] {
+	if len(p.Children) > 1 {
+		return p.Children[1]
+	}
+	return nil
+}
+
+// SetRight sets the right child in the case of a binary tree and returns the
+// previous value.
+func (p *Node[V]) SetRight(r *Node[V]) *Node[V] {
+	for len(p.Children) < 2 {
+		p.Children = append(p.Children, nil)
+	}
+	old := p.Children[1]
+	p.Children[1] = r
+	r.Parent = p
+	return old
 }
 
 // ParseFn is the signature for the parsing function used to build the
@@ -217,103 +253,113 @@ func (p *Parser[V]) Replace(v V) V {
 	return oldVal
 }
 
-// RotateLeft restructures the tree by moving the current node to the
-// position of its parent node. The original parent node becomes a
-// child of the current node. All other child nodes of the original
-// parent remain unchanged, except for the current node which becomes
-// the new parent. If RotateLeft is called on the root node then
-// ErrMissingRequiredNode is returned.
+// RotateLeft performs a left rotation in the case of a binary tree at the
+// current tree location and returns the new root of the rotated sub-tree.
+// If the current node has no right child, this method is a no-op.
 //
-// Note that the default empty root node may be rotated if RotateLeft is called
-// on a child node of the root node..
-func (p *Parser[V]) RotateLeft() (*Node[V], error) {
-	// n = node , op = original parent , gp = grand parent
-	n := p.node
+// See: https://en.wikipedia.org/wiki/Tree_rotation
+func (p *Parser[V]) RotateLeft() *Node[V] {
+	// The tree is rotated as follows. The nodes A, B, C are root nodes of
+	// potential sub-trees.
+	/*
+	 *      P                       Q
+	 *  /       \               /       \
+	 *  A       Q       ->      P       C
+	 *      /       \       /       \
+	 *      B       C       A       B
+	 */
+	subRoot := p.node
+	subRootParent := subRoot.Parent
 
-	op := n.Parent
-	if op == nil {
-		return nil, ErrMissingRequiredNode
+	// Let Q be P's right child.
+	q := subRoot.Right()
+	if q == nil {
+		return p.node
 	}
 
-	gp := op.Parent
+	// Set P's right child to be Q's left child.
+	// [Set Q's left-child's parent to P]
+	subRoot.SetRight(q.Left())
 
-	// Remove n from op's Children
-	opChildren := op.Children[:0]
-	for _, x := range op.Children {
-		if x != n {
-			opChildren = append(opChildren, x)
-		}
-	}
-	op.Children = opChildren
+	// Set Q's left child to be P.
+	// [Set P's parent to Q]
+	q.SetLeft(subRoot)
 
-	// Add op to n's Children
-	n.Children = append(n.Children, op)
-
-	// Update op's Parent
-	op.Parent = n
-
-	// Update n's Parent
-	n.Parent = gp
-
-	// Replace op with n in gp's Children
-	if gp != nil {
-		gpChildren := gp.Children[:0]
-		for _, x := range gp.Children {
-			if x != op {
-				gpChildren = append(gpChildren, x)
-			} else {
-				gpChildren = append(gpChildren, n)
+	// Update the sub-root's parent.
+	if subRootParent != nil {
+		for i := range subRootParent.Children {
+			if subRootParent.Children[i] == subRoot {
+				subRootParent.Children[i] = q
+				q.Parent = subRootParent
+				break
 			}
 		}
-		gp.Children = gpChildren
+	} else {
+		q.Parent = nil
 	}
 
-	// Update the tree root if needed
-	if p.root == op {
-		p.root = n
+	// Update the current location.
+	p.node = q
+	// Update the root node if necessary.
+	if subRoot == p.root {
+		p.root = p.node
 	}
 
-	return n, nil
+	return p.node
 }
 
-// AdoptSibling moves the current node's previous sibling into the node's
-// child. If no previous sibling exists, ErrMissingRequiredNode is returned.
-func (p *Parser[V]) AdoptSibling() (*Node[V], error) {
-	// n = node , op = original parent , s = sibling
-	n := p.node
-	op := n.Parent
-	var s *Node[V]
+// RotateRight performs a right rotation in the case of a binary tree and returns
+// the new root of the rotated sub-tree.
+// If the current node has no left child, this method is a no-op.
+//
+// See: https://en.wikipedia.org/wiki/Tree_rotation
+func (p *Parser[V]) RotateRight() *Node[V] {
+	// The tree is rotated as follows. The nodes A, B, C are root nodes of
+	// potential sub-trees.
+	/*
+	 *          P                       Q
+	 *      /       \               /       \
+	 *      Q       C       ->      A       P
+	 *  /       \                       /       \
+	 *  A       B                       B       C
+	 */
 
-	if op == nil {
-		return nil, ErrMissingRequiredNode
+	subRoot := p.node
+	subRootParent := subRoot.Parent
+
+	// Let Q be P's left child.
+	q := subRoot.Left()
+	if q == nil {
+		return p.node
 	}
 
-	// Find the previous sibling
-	for _, x := range op.Children {
-		if x == n {
-			break
+	// Set P's left child to be Q's right child.
+	// [Set Q's right-child's parent to P]
+	subRoot.SetLeft(q.Right())
+
+	// Set Q's right child to be P.
+	// [Set P's parent to Q]
+	q.SetRight(subRoot)
+
+	// Update the sub-root's parent.
+	if subRootParent != nil {
+		for i := range subRootParent.Children {
+			if subRootParent.Children[i] == subRoot {
+				subRootParent.Children[i] = q
+				q.Parent = subRootParent
+				break
+			}
 		}
-		s = x
+	} else {
+		q.Parent = nil
 	}
 
-	if s == nil {
-		return nil, ErrMissingRequiredNode
+	// Update the current location.
+	p.node = q
+	// Update the root node if necessary.
+	if subRoot == p.root {
+		p.root = p.node
 	}
 
-	// Remove s from op's Children
-	opChildren := op.Children[:0]
-	for _, x := range op.Children {
-		if x != s {
-			opChildren = append(opChildren, x)
-		}
-	}
-	op.Children = opChildren
-
-	// Add s to n's Children
-	n.Children = append(n.Children, s)
-
-	// Update s's Parent
-	s.Parent = n
-
-	return n, nil
+	return p.node
 }
