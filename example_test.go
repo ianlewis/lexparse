@@ -169,7 +169,7 @@ func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 	return parseInit, nil
 }
 
-// execute executes the template with the given data.
+// execute renders the template with the given data.
 func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, error) {
 	var b strings.Builder
 	for _, n := range root.Children {
@@ -181,9 +181,7 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 			// Replace templated variables with given data.
 			val, ok := data[n.Value.action]
 			if !ok {
-				fmt.Println(fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line+1, n.Column+1))
-				// return b.String(), fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line, n.Column)
-				return b.String(), nil
+				return b.String(), fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line+1, n.Column+1)
 			}
 			b.WriteString(val)
 		}
