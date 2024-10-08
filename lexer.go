@@ -458,7 +458,7 @@ func (l *Lexer) Done() <-chan struct{} {
 	return l.done
 }
 
-// Lexeme returns a new Lexeme at the current position.
+// Lexeme returns a new Lexeme at the current lexeme position.
 func (l *Lexer) Lexeme(typ LexemeType) *Lexeme {
 	l.s.Lock()
 	lexeme := &Lexeme{
@@ -474,6 +474,7 @@ func (l *Lexer) Lexeme(typ LexemeType) *Lexeme {
 
 // Emit is used by State implementations to emit a lexeme which will be passed
 // on to the parser. If the lexer is not currently active, this is a no-op.
+// This advances the current lexeme position.
 func (l *Lexer) Emit(lexeme *Lexeme) {
 	if l.lexemes == nil {
 		return

@@ -112,8 +112,11 @@ type Parser[V comparable] struct {
 	// node is the current node under processing.
 	node *Node[V]
 
-	// lexeme is the next lexeme in the stream.
+	// lexeme is the current lexeme in the stream.
 	lexeme *Lexeme
+
+	// next is the next lexeme in the stream.
+	next *Lexeme
 }
 
 // Parse builds a parse tree by repeatedly calling parseFn. parseFn
@@ -152,22 +155,24 @@ func (p *Parser[V]) Root() *Node[V] {
 
 // Peek returns the next Lexeme from the lexer without consuming it.
 func (p *Parser[V]) Peek() *Lexeme {
-	if p.lexeme != nil {
-		return p.lexeme
+	if p.next != nil {
+		return p.next
 	}
 	l, ok := <-p.lexemes
 	if !ok {
 		return nil
 	}
-	p.lexeme = l
-	return p.lexeme
+	p.next = l
+	return p.next
 }
 
-// Next returns the next Lexeme from the lexer.
+// Next returns the next Lexeme from the lexer. This is the new current lexeme
+// position.
 func (p *Parser[V]) Next() *Lexeme {
 	l := p.Peek()
-	p.lexeme = nil
-	return l
+	p.next = nil
+	p.lexeme = l
+	return p.lexeme
 }
 
 // Pos returns the current node position in the tree. May return nil if a root

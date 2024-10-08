@@ -65,10 +65,16 @@ func TestLexParse(t *testing.T) {
 
 		expectedRoot := newTree(
 			&Node[string]{
-				Value: "Hello",
+				Value:  "Hello",
+				Line:   0,
+				Column: 0,
+				Pos:    0,
 			},
 			&Node[string]{
-				Value: "World!",
+				Value:  "World!",
+				Line:   1,
+				Column: 0,
+				Pos:    6,
 			},
 		)
 

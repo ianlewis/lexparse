@@ -113,19 +113,34 @@ func TestParser_parse_op2(t *testing.T) {
 
 	// Does the tree look as expected?
 	expectedRoot := newTree(&Node[string]{
-		Value: "push",
+		Value:  "push",
+		Line:   0,
+		Column: 0,
+		Pos:    0,
 		Children: []*Node[string]{
 			{
-				Value: "1",
+				Value:  "1",
+				Line:   0,
+				Column: 5,
+				Pos:    5,
 			},
 			{
-				Value: "push",
+				Value:  "push",
+				Line:   0,
+				Column: 7,
+				Pos:    7,
 				Children: []*Node[string]{
 					{
-						Value: "2",
+						Value:  "2",
+						Line:   0,
+						Column: 12,
+						Pos:    12,
 					},
 					{
-						Value: "3",
+						Value:  "3",
+						Line:   0,
+						Column: 14,
+						Pos:    14,
 					},
 				},
 			},
