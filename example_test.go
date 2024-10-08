@@ -192,8 +192,8 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 }
 
 // Example_templateEngine implements a simple text templating language. The
-// language // replaces variables identified with double brackets
-// (e.g. `{{ var }}`) with // data values for those variables.
+// language replaces variables identified with double brackets
+// (e.g. `{{ var }}`) with data values for those variables.
 //
 // LexParse is used to lex and parse the template into a parse tree. This tree
 // can be passed with a data map to the execute function to interpret the template
