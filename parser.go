@@ -52,7 +52,9 @@ func (p *Node[V]) SetLeft(l *Node[V]) *Node[V] {
 	}
 	old := p.Children[0]
 	p.Children[0] = l
-	l.Parent = p
+	if l != nil {
+		l.Parent = p
+	}
 	return old
 }
 
@@ -72,7 +74,9 @@ func (p *Node[V]) SetRight(r *Node[V]) *Node[V] {
 	}
 	old := p.Children[1]
 	p.Children[1] = r
-	r.Parent = p
+	if r != nil {
+		r.Parent = p
+	}
 	return old
 }
 
