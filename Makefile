@@ -1,4 +1,5 @@
 # Copyright 2023 Google LLC
+# Copyright 2024 Ian Lewis
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +20,18 @@ REPO_NAME = $(shell basename "$$(pwd)")
 TESTCOUNT ?= 1
 TESTTIMEOUT ?= 10m
 
+# The help command prints targets in groups. Help documentation in the Makefile
+# uses comments with double hash marks (##). Documentation is printed by the
+# help target in the order in appears in the Makefile.
+#
+# Make targets can be documented with double hash marks as follows:
+#
+#	target-name: ## target documentation.
+#
+# Groups can be added with the following style:
+#
+#	## Group name
+
 .PHONY: help
 help: ## Shows all targets and help from the Makefile (this message).
 	@echo "$(REPO_NAME) Makefile"
@@ -36,17 +49,27 @@ help: ## Shows all targets and help from the Makefile (this message).
 		}'
 
 package-lock.json:
-	npm install
+	@npm install
 
 node_modules/.installed: package.json package-lock.json
-	npm ci
-	touch node_modules/.installed
+	@npm ci
+	@touch node_modules/.installed
+
+.venv/bin/activate:
+	@python -m venv .venv
+
+.venv/.installed: .venv/bin/activate requirements.txt
+	@./.venv/bin/pip install -r requirements.txt --require-hashes
+	@touch .venv/.installed
 
 ## Testing
 #####################################################################
 
 .PHONY: unit-test
-unit-test: ## Runs unit tests.
+unit-test: go-test ## Runs all unit tests.
+
+.PHONY: go-test
+go-test: ## Runs Go unit tests.
 	@set -e;\
 		go mod vendor; \
 		extraargs=""; \
@@ -55,86 +78,98 @@ unit-test: ## Runs unit tests.
 		fi; \
 		go test $$extraargs -mod=vendor -timeout=$(TESTTIMEOUT) -count=$(TESTCOUNT) -race -coverprofile=coverage.out -covermode=atomic ./...
 
+## Benchmarking
+#####################################################################
+
+.PHONY: go-benchmark
+go-benchmark: ## Runs Go benchmarks.
+	@set -e;\
+		go mod vendor; \
+		extraargs=""; \
+		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
+			extraargs="-v"; \
+		fi; \
+		go test $$extraargs -bench=. -count=$(TESTCOUNT) -benchtime=$(BENCHTIME) -run='^#' ./...
+
 ## Tools
 #####################################################################
 
-.PHONY: autogen
-autogen: ## Runs autogen on code files.
+.PHONY: license-headers
+license-headers: ## Update license headers.
 	@set -euo pipefail; \
-		md_files=$$( \
-			find . -type f \
-				\( \
-					-name '*.go' -o \
-					-name '*.yaml' -o \
-					-name '*.yml' \
-				\) \
-				-not -iwholename '*/.git/*' \
-				-not -iwholename '*/vendor/*' \
-				-not -iwholename '*/node_modules/*' \
+		files=$$( \
+			git ls-files --deduplicate \
+				'*.go' '**/*.go' \
+				'*.ts' '**/*.ts' \
+				'*.js' '**/*.js' \
+				'*.py' '**/*.py' \
+				'*.yaml' '**/*.yaml' \
+				'*.yml' '**/*.yml' \
+				'Makefile' \
 		); \
-		for filename in $${md_files}; do \
+		name=$$(git config user.name); \
+		if [ "$${name}" == "" ]; then \
+			>&2 echo "git user.name is required."; \
+			>&2 echo "Set it up using:"; \
+			>&2 echo "git config user.name \"John Doe\""; \
+		fi; \
+		for filename in $${files}; do \
 			if ! ( head "$${filename}" | grep -iL "Copyright" > /dev/null ); then \
-				autogen -i --no-code --no-tlc -c "Google LLC" -l apache "$${filename}"; \
+				autogen -i --no-code --no-tlc -c "$${name}" -l apache "$${filename}"; \
 			fi; \
 		done; \
 		if ! ( head Makefile | grep -iL "Copyright" > /dev/null ); then \
-			autogen -i --no-code --no-tlc -c "Google LLC" -l apache Makefile; \
+			autogen -i --no-code --no-tlc -c "$${name}" -l apache Makefile; \
 		fi;
+
+## Formatting
+#####################################################################
 
 .PHONY: format
 format: go-format md-format yaml-format ## Format all files
 
-.PHONY: go-format
-go-format: ## Format Go files.
-	gofumpt -w .
-	gci write .
-
 .PHONY: md-format
 md-format: node_modules/.installed ## Format Markdown files.
-	@set -e;\
+	@set -euo pipefail; \
 		files=$$( \
-			find . -type f \
-				\( \
-					-name '*.md' -o \
-					-name '*.markdown' \
-				\) \
-				-not -iwholename '*/.git/*' \
-				-not -iwholename '*/vendor/*' \
-				-not -iwholename '*/node_modules/*' \
+			git ls-files --deduplicate \
+				'*.md' '**/*.md' \
 		); \
-		./node_modules/.bin/prettier --write $${files}
+		npx prettier --write --no-error-on-unmatched-pattern $${files}
 
 .PHONY: yaml-format
 yaml-format: node_modules/.installed ## Format YAML files.
-	@set -e;\
+	@set -euo pipefail; \
 		files=$$( \
-			find . -type f \
-				\( \
-					-name '*.yaml' -o \
-					-name '*.yml' \
-				\) \
-				-not -iwholename '*/.git/*' \
-				-not -iwholename '*/vendor/*' \
-				-not -iwholename '*/node_modules/*' \
+			git ls-files --deduplicate \
+				'*.yml' '**/*.yml' \
+				'*.yaml' '**/*.yaml' \
 		); \
-		./node_modules/.bin/prettier --write $${files}
+		npx prettier --write --no-error-on-unmatched-pattern $${files}
 
-## Linters
+.PHONY: go-format
+go-format: ## Format Go files (gofumpt).
+	@set -euo pipefail;\
+		files=$$(git ls-files '*.go'); \
+		if [ "$${files}" != "" ]; then \
+			gofumpt -w $${files}; \
+			gci write  --skip-generated -s standard -s default -s "prefix(github.com/ianlewis/lexparse)" $${files}; \
+		fi
+
+## Linting
 #####################################################################
 
 .PHONY: lint
-lint: golangci-lint yamllint actionlint markdownlint ## Run all linters.
+lint: yamllint markdownlint actionlint zizmor golangci-lint ## Run all linters.
 
 .PHONY: actionlint
 actionlint: ## Runs the actionlint linter.
 	@# NOTE: We need to ignore config files used in tests.
-	@set -e;\
+	@set -euo pipefail;\
 		files=$$( \
-			find .github/workflows/ -type f \
-				\( \
-					-name '*.yaml' -o \
-					-name '*.yml' \
-				\) \
+			git ls-files --deduplicate \
+				'.github/workflows/*.yml' \
+				'.github/workflows/*.yaml' \
 		); \
 		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
 			actionlint -format '{{range $$err := .}}::error file={{$$err.Filepath}},line={{$$err.Line}},col={{$$err.Column}}::{{$$err.Message}}%0A```%0A{{replace $$err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' -ignore 'SC2016:' $${files}; \
@@ -142,9 +177,37 @@ actionlint: ## Runs the actionlint linter.
 			actionlint $${files}; \
 		fi
 
+.PHONY: zizmor
+zizmor: .venv/.installed ## Runs the zizmor linter.
+	@# NOTE: On GitHub actions this outputs SARIF format to zizmor.sarif.json
+	@#       rather than outputting errors to the terminal. This is so that
+	@#       security issues can be uploaded privately rather than being made
+	@#       public.
+	@set -euo pipefail;\
+		extraargs=""; \
+		files=$$( \
+			git ls-files --deduplicate \
+				'.github/workflows/*.yml' \
+				'.github/workflows/*.yaml' \
+		); \
+		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
+			.venv/bin/zizmor --pedantic --format sarif $${files} > zizmor.sarif.json; \
+		else \
+			.venv/bin/zizmor --pedantic --format plain $${files}; \
+		fi
+
 .PHONY: markdownlint
 markdownlint: node_modules/.installed ## Runs the markdownlint linter.
-	@set -e;\
+	@# NOTE: Issue and PR templates are handled specially so we can disable
+	@# MD041/first-line-heading/first-line-h1 without adding an ugly html comment
+	@# at the top of the file.
+	@set -euo pipefail;\
+		files=$$( \
+			git ls-files --deduplicate \
+				'*.md' '**/*.md' \
+				':!:.github/pull_request_template.md' \
+				':!:.github/ISSUE_TEMPLATE/*.md' \
+		); \
 		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
 			exit_code=0; \
 			while IFS="" read -r p && [ -n "$$p" ]; do \
@@ -154,26 +217,61 @@ markdownlint: node_modules/.installed ## Runs the markdownlint linter.
 				message=$$(echo "$$p" | jq -c -r '.ruleNames[0] + "/" + .ruleNames[1] + " " + .ruleDescription + " [Detail: \"" + .errorDetail + "\", Context: \"" + .errorContext + "\"]"'); \
 				exit_code=1; \
 				echo "::error file=$${file},line=$${line},endLine=$${endline}::$${message}"; \
-			done <<< "$$(./node_modules/.bin/markdownlint --dot --json . 2>&1 | jq -c '.[]')"; \
-			exit "$${exit_code}"; \
+			done <<< "$$(npx markdownlint --config .markdownlint.yaml --dot --json $${files} 2>&1 | jq -c '.[]')"; \
+			if [ "$${exit_code}" != "0" ]; then \
+				exit "$${exit_code}"; \
+			fi; \
 		else \
-			./node_modules/.bin/markdownlint --dot .; \
+			npx markdownlint --config .markdownlint.yaml --dot $${files}; \
+		fi; \
+		files=$$( \
+			git ls-files --deduplicate \
+				'.github/pull_request_template.md' \
+				'.github/ISSUE_TEMPLATE/*.md' \
+		); \
+		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
+			exit_code=0; \
+			while IFS="" read -r p && [ -n "$$p" ]; do \
+				file=$$(echo "$$p" | jq -c -r '.fileName // empty'); \
+				line=$$(echo "$$p" | jq -c -r '.lineNumber // empty'); \
+				endline=$${line}; \
+				message=$$(echo "$$p" | jq -c -r '.ruleNames[0] + "/" + .ruleNames[1] + " " + .ruleDescription + " [Detail: \"" + .errorDetail + "\", Context: \"" + .errorContext + "\"]"'); \
+				exit_code=1; \
+				echo "::error file=$${file},line=$${line},endLine=$${endline}::$${message}"; \
+			done <<< "$$(npx markdownlint --config .github/template.markdownlint.yaml --dot --json $${files} 2>&1 | jq -c '.[]')"; \
+			if [ "$${exit_code}" != "0" ]; then \
+				exit "$${exit_code}"; \
+			fi; \
+		else \
+			npx markdownlint  --config .github/template.markdownlint.yaml --dot $${files}; \
 		fi
 
-.PHONY: golangci-lint
-golangci-lint: ## Runs the golangci-lint linter.
-	@set -e;\
-		extraargs=""; \
-		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
-			extraargs="--out-format github-actions"; \
-		fi; \
-		golangci-lint run -c .golangci.yml ./... $$extraargs
-
 .PHONY: yamllint
-yamllint: ## Runs the yamllint linter.
-	@set -e;\
+yamllint: .venv/.installed ## Runs the yamllint linter.
+	@set -euo pipefail;\
 		extraargs=""; \
+		files=$$( \
+			git ls-files --deduplicate \
+				'*.yml' '**/*.yml' \
+				'*.yaml' '**/*.yaml' \
+		); \
 		if [ "$(OUTPUT_FORMAT)" == "github" ]; then \
 			extraargs="-f github"; \
 		fi; \
-		yamllint --strict -c .yamllint.yaml . $$extraargs
+		.venv/bin/yamllint --strict -c .yamllint.yaml $${extraargs} $${files}
+
+.PHONY: golangci-lint
+golangci-lint: ## Runs the golangci-lint linter.
+	@golangci-lint run -c .golangci.yml ./...
+
+## Maintenance
+#####################################################################
+
+.PHONY: clean
+clean: ## Delete temporary files.
+	@rm -rf \
+		.venv \
+		node_modules \
+		*.sarif.json \
+		vendor \
+		coverage.out

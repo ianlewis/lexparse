@@ -19,12 +19,14 @@ on:
     types: [opened, edited, reopened, synchronize]
   merge_group:
 
-permissions: read-all
+permissions: {}
 
 jobs:
   validate:
     name: Validate PR Title
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
     steps:
       - uses: thehanimo/pr-title-checker@5652588c80c479af803eabfbdb5a3895a77c1388 # v1.4.1
         with:
