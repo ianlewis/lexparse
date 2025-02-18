@@ -1,4 +1,5 @@
 # Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +38,9 @@ linters:
     # Some linters have been removed because of the go 1.18 issues.
     # https://github.com/golangci/golangci-lint/issues/2649
     - asciicheck
+    - asciicheck
+    - contextcheck
+    - copyloopvar
     - depguard
     - dogsled
     - err113
