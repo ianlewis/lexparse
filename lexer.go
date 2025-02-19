@@ -85,10 +85,10 @@ type Lexeme struct {
 	// Pos is the position in the byte stream where the Lexeme was found.
 	Pos int
 
-	// Line is the line number where the Lexeme was found.
+	// Line is the line number where the Lexeme was found (one-based).
 	Line int
 
-	// Column is the column in the line where the Lexeme was found.
+	// Column is the column in the line where the Lexeme was found (one-based).
 	Column int
 }
 
@@ -161,18 +161,18 @@ func (l *Lexer) Pos() int {
 	return pos
 }
 
-// Line returns the current line in the input (zero indexed).
+// Line returns the current line in the input (one-based).
 func (l *Lexer) Line() int {
 	l.s.Lock()
-	line := l.s.line
+	line := l.s.line + 1
 	l.s.Unlock()
 	return line
 }
 
-// Column returns the current column in the input (zero indexed).
+// Column returns the current column in the input (one-based).
 func (l *Lexer) Column() int {
 	l.s.Lock()
-	c := l.s.column
+	c := l.s.column + 1
 	l.s.Unlock()
 	return c
 }
@@ -465,8 +465,8 @@ func (l *Lexer) Lexeme(typ LexemeType) *Lexeme {
 		Type:   typ,
 		Value:  l.s.b.String(),
 		Pos:    l.s.startPos,
-		Line:   l.s.startLine,
-		Column: l.s.startColumn,
+		Line:   l.s.startLine + 1,
+		Column: l.s.startColumn + 1,
 	}
 	l.s.Unlock()
 	return lexeme
