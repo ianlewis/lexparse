@@ -60,9 +60,8 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	token, err := l.Find([]string{actionLeft})
 
 	// Emit the text up until this point.
-	lexeme := l.Lexeme(textType)
-	if lexeme.Value != "" {
-		l.Emit(lexeme)
+	if l.Width() > 0 {
+		l.Emit(textType)
 	}
 
 	// Progress to lexing the action if brackets are found.
@@ -92,10 +91,8 @@ func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	var nextState lexparse.State
 	if token == actionRight {
 		// Emit the lexeme.
-		lexeme := l.Lexeme(actionType)
-
-		if strings.TrimSpace(lexeme.Value) != "" {
-			l.Emit(lexeme)
+		if l.Width() > 0 {
+			l.Emit(actionType)
 		}
 
 		// Discard the right brackets
@@ -168,8 +165,8 @@ func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 	return parseInit, nil
 }
 
-// execute renders the template with the given data.
-func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, error) {
+// Execute renders the template with the given data.
+func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, error) {
 	var b strings.Builder
 	for _, n := range root.Children {
 		switch n.Value.typ {
@@ -193,7 +190,7 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 // (e.g. `{{ var }}`) with data values for those variables.
 //
 // LexParse is used to lex and parse the template into a parse tree. This tree
-// can be passed with a data map to the execute function to interpret the template
+// can be passed with a data map to the Execute function to interpret the template
 // and retrieve a final result.
 //
 // This example includes some best practices for error handling, such as
@@ -204,7 +201,7 @@ func Example_templateEngine() {
 	if err != nil {
 		panic(err)
 	}
-	txt, err := execute(t, map[string]string{"subject": "世界"})
+	txt, err := Execute(t, map[string]string{"subject": "世界"})
 	if err != nil {
 		panic(err)
 	}
