@@ -38,7 +38,7 @@ const (
 
 var (
 	errType           = errors.New("unexpected type")
-	errUnclosedAction = errors.New("unclosed action")
+	ErrUnclosedAction = errors.New("unclosed action")
 )
 
 type nodeType int
@@ -58,6 +58,9 @@ type tmplNode struct {
 func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	// Search the input for left brackets.
 	token, err := l.Find([]string{actionLeft})
+
+	// NOTE: Even if we encounter EOF or another error we need to emit the text
+	// up to this point.
 
 	// Emit the text up until this point.
 	if l.Width() > 0 {
@@ -103,9 +106,9 @@ func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	}
 
 	if err != nil {
-		// Don't wrap EOF since it's unexpected.
+		// Don't wrap EOF since it's unexpected. Convert to ErrUnclosedAction.
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%w: line %d, column %d", errUnclosedAction, l.Line()+1, l.Column()+1)
+			return nil, fmt.Errorf("%w: line %d, column %d", ErrUnclosedAction, l.Line(), l.Column())
 		}
 		return nextState, fmt.Errorf("lexing action: %w", err)
 	}
@@ -126,6 +129,7 @@ func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Parse
 	case actionType:
 		return parseAction, nil
 	default:
+		// NOTE: This shouldn't happen.
 		return nil, fmt.Errorf("%w: %v", errType, l.Type)
 	}
 }
