@@ -19,37 +19,44 @@ package lexparse
 import (
 	"context"
 	"errors"
+	"sync"
 )
 
 // LexParse lexes the content starting at initState and passes the results to a
 // parser starting at initFn. The resulting root node of the parse tree is returned.
 func LexParse[V comparable](
 	ctx context.Context,
-	r BufferedRuneReader,
-	initState State,
-	initFn ParseFn[V],
+	l *Lexer,
+	p *Parser[V],
 ) (*Node[V], error) {
-	l := NewLexer(r, initState)
-
+	var root *Node[V]
+	var lexErr error
+	var parseErr error
+	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p := NewParser[V](l.Lex(ctx))
-	n, pErr := p.Parse(ctx, initFn)
-	cancel()
 
-	<-l.Done()
+	wg.Add(1)
+	go func() {
+		lexErr = l.Lex(ctx)
+		wg.Done()
+	}()
 
-	// Check for lexing error.
-	var err error
-	lErr := l.Err()
-	if lErr != nil && !errors.Is(lErr, context.Canceled) {
-		err = lErr
+	wg.Add(1)
+	go func() {
+		root, parseErr = p.Parse(ctx)
+		cancel() // Indicate that parsing is done.
+		wg.Done()
+	}()
+
+	wg.Wait()
+
+	err := lexErr
+	// Do not report context.Canceled errors from the Lexer. If the context is
+	// canceled by the caller the parser will also return this error.
+	if err == nil || errors.Is(err, context.Canceled) {
+		err = parseErr
 	}
 
-	// If no lexing error return parsing error.
-	if err == nil {
-		err = pErr
-	}
-
-	return n, err
+	return root, err
 }

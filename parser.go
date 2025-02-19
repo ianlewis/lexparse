@@ -17,7 +17,9 @@ package lexparse
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"sync"
 )
 
 // Node is the structure for a single node in the parse tree.
@@ -36,165 +38,172 @@ type Node[V comparable] struct {
 	Column int
 }
 
-// Left returns the left child in the case of a binary tree.
-func (p *Node[V]) Left() *Node[V] {
-	if len(p.Children) > 0 {
-		return p.Children[0]
-	}
-	return nil
+// ParseState is the state of the current parsing state machine. It defines the logic
+// to process the current state and returns the next state.
+type ParseState[V comparable] interface {
+	// Run returns the next state to transition to or an error. If the returned
+	// next state is nil or the returned error is io.EOF then the Lexer
+	// finishes processing normally.
+	Run(context.Context, *Parser[V]) (ParseState[V], error)
 }
 
-// SetLeft sets the left child in the case of a binary tree and returns the
-// previous value.
-func (p *Node[V]) SetLeft(l *Node[V]) *Node[V] {
-	for len(p.Children) < 1 {
-		p.Children = append(p.Children, nil)
-	}
-	old := p.Children[0]
-	p.Children[0] = l
-	if l != nil {
-		l.Parent = p
-	}
-	return old
+type parseFnState[V comparable] struct {
+	f func(context.Context, *Parser[V]) (ParseState[V], error)
 }
 
-// Right returns the right child in the case of a binary tree.
-func (p *Node[V]) Right() *Node[V] {
-	if len(p.Children) > 1 {
-		return p.Children[1]
+// Run implements ParseState.Run.
+func (s *parseFnState[V]) Run(ctx context.Context, p *Parser[V]) (ParseState[V], error) {
+	if s.f == nil {
+		return nil, nil
 	}
-	return nil
+	return s.f(ctx, p)
 }
 
-// SetRight sets the right child in the case of a binary tree and returns the
-// previous value.
-func (p *Node[V]) SetRight(r *Node[V]) *Node[V] {
-	for len(p.Children) < 2 {
-		p.Children = append(p.Children, nil)
-	}
-	old := p.Children[1]
-	p.Children[1] = r
-	if r != nil {
-		r.Parent = p
-	}
-	return old
+// ParseStateFn creates a State from the given Run function.
+func ParseStateFn[V comparable](f func(context.Context, *Parser[V]) (ParseState[V], error)) ParseState[V] {
+	return &parseFnState[V]{f}
 }
-
-// ParseFn is the signature for the parsing function used to build the
-// parse tree from lexemes. The parsing function is passed to
-// Parse().
-// There may be more than one parsing function used by a parser. The
-// top-level function is passed to Parse(). A parsing function hands
-// parsing off to another function by returning a pointer to the other
-// function. Parse() will continue calling returned functions until
-// nil is returned.
-type ParseFn[V comparable] func(context.Context, *Parser[V]) (ParseFn[V], error)
 
 // NewParser creates a new Parser that reads from the lexemes channel. The
 // parser is initialized with a root node with an empty value.
-func NewParser[V comparable](lexemes <-chan *Lexeme) *Parser[V] {
+func NewParser[V comparable](lexemes <-chan *Lexeme, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
+		state:   startingState,
 		lexemes: lexemes,
-		root:    root,
-		node:    root,
 	}
+	p.s.root = root
+	p.s.node = root
 	return p
 }
 
-// Parser reads the lexemes produced by a Lexer and builds a parse tree.
+// Parser reads the lexemes produced by a Lexer and builds a parse tree. It is
+// implemented as a finite-state machine in which each [ParseState] implements
+// it's own processing.
+//
+// Parser maintains a current position in the parse tree which can be utilized
+// by parser states.
 type Parser[V comparable] struct {
+	// lexemes is a channel from which the parser will retrieve lexemes from the lexer.
 	lexemes <-chan *Lexeme
 
-	// root is the root node of the parse tree.
-	root *Node[V]
+	// state is the current state of the Parser.
+	state ParseState[V]
 
-	// node is the current node under processing.
-	node *Node[V]
+	// s is the current parser tree state.
+	s struct {
+		// Mutex protects the values in s.
+		sync.Mutex
 
-	// lexeme is the current lexeme in the stream.
-	lexeme *Lexeme
+		// root is the root node of the parse tree.
+		root *Node[V]
 
-	// next is the next lexeme in the stream.
-	next *Lexeme
+		// node is the current node under processing.
+		node *Node[V]
+
+		// lexeme is the current lexeme in the stream.
+		lexeme *Lexeme
+
+		// next is the next lexeme in the stream.
+		next *Lexeme
+	}
 }
 
-// Parse builds a parse tree by repeatedly calling parseFn. parseFn
-// takes cxt and the Parser as arguments and returns the parseFn and
-// an error. The parse tree is built when parseFn returns nil for the
-// parseFn. Parsing can be cancelled by ctx.
-func (p *Parser[V]) Parse(ctx context.Context, parseFn ParseFn[V]) (*Node[V], error) {
-	for {
-		if parseFn == nil {
-			break
-		}
+// Parse builds a parse tree by repeatedly calling [ParseState] starting with
+// the initial state. Parsing can be cancelled by ctx.
+//
+// The caller can request that the parser stop by cancelling ctx.
+func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
+	for p.state != nil {
 		select {
 		case <-ctx.Done():
-			//nolint:wrapcheck // We don't need to wrap the context Error.
-			return p.root, ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return p.Root(), fmt.Errorf("parsing: %w", err)
+			}
+			return p.Root(), nil
 		default:
 		}
 
 		var err error
-		parseFn, err = parseFn(ctx, p)
+		p.state, err = p.state.Run(ctx, p)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 
-			return p.root, err
+			return p.Root(), fmt.Errorf("parsing: %w", err)
 		}
 	}
-	return p.root, nil
+	return p.Root(), nil
 }
 
 // Root returns the root of the parse tree.
 func (p *Parser[V]) Root() *Node[V] {
-	return p.root
+	p.s.Lock()
+	defer p.s.Unlock()
+	return p.s.root
 }
 
 // Peek returns the next Lexeme from the lexer without consuming it.
 func (p *Parser[V]) Peek() *Lexeme {
-	if p.next != nil {
-		return p.next
+	p.s.Lock()
+	defer p.s.Unlock()
+	return p.peek()
+}
+
+func (p *Parser[V]) peek() *Lexeme {
+	if p.s.next != nil {
+		return p.s.next
 	}
 	l, ok := <-p.lexemes
 	if !ok {
 		return nil
 	}
-	p.next = l
-	return p.next
+	p.s.next = l
+	return p.s.next
 }
 
 // Next returns the next Lexeme from the lexer. This is the new current lexeme
 // position.
 func (p *Parser[V]) Next() *Lexeme {
-	l := p.Peek()
-	p.next = nil
-	p.lexeme = l
-	return p.lexeme
+	p.s.Lock()
+	defer p.s.Unlock()
+
+	l := p.peek()
+	p.s.next = nil
+	p.s.lexeme = l
+	return p.s.lexeme
 }
 
 // Pos returns the current node position in the tree. May return nil if a root
 // node has not been created.
 func (p *Parser[V]) Pos() *Node[V] {
-	return p.node
+	p.s.Lock()
+	defer p.s.Unlock()
+	return p.s.node
 }
 
-// Push creates a new node, adds it as a child to the current node, and sets it
-// as the current node. The new node is returned.
+// Push creates a new node, adds it as a child to the current node, updates
+// the current node to the new node, and returns the new node.
 func (p *Parser[V]) Push(v V) *Node[V] {
-	n := p.Node(v)
-	p.node = n
-	return n
+	p.s.Lock()
+	defer p.s.Unlock()
+	p.s.node = p.node(v)
+	return p.s.node
 }
 
 // Node creates a new node at the current lexeme position and adds it as a
-// child to the current node.
+// child to the current node. The current node is not updated.
 func (p *Parser[V]) Node(v V) *Node[V] {
+	p.s.Lock()
+	defer p.s.Unlock()
+	return p.node(v)
+}
+
+func (p *Parser[V]) node(v V) *Node[V] {
 	n := p.newNode(v)
-	n.Parent = p.node
-	p.node.Children = append(p.node.Children, n)
+	p.s.node.Children = append(p.s.node.Children, n)
+	n.Parent = p.s.node
 	return n
 }
 
@@ -202,10 +211,10 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 // without adding it to the tree.
 func (p *Parser[V]) newNode(v V) *Node[V] {
 	var pos, line, col int
-	if p.lexeme != nil {
-		pos = p.lexeme.Pos
-		line = p.lexeme.Line
-		col = p.lexeme.Column
+	if p.s.lexeme != nil {
+		pos = p.s.lexeme.Pos
+		line = p.s.lexeme.Line
+		col = p.s.lexeme.Column
 	}
 
 	return &Node[V]{
@@ -220,9 +229,12 @@ func (p *Parser[V]) newNode(v V) *Node[V] {
 // returning the previous current node. It is a no-op that returns the root
 // node if called on the root node.
 func (p *Parser[V]) Climb() *Node[V] {
-	n := p.node
-	if p.node.Parent != nil {
-		p.node = p.node.Parent
+	p.s.Lock()
+	defer p.s.Unlock()
+
+	n := p.s.node
+	if p.s.node.Parent != nil {
+		p.s.node = p.s.node.Parent
 	}
 	return n
 }
@@ -231,13 +243,16 @@ func (p *Parser[V]) Climb() *Node[V] {
 // old node is removed from the tree and it's value is returned. Can be used to
 // replace the root node.
 func (p *Parser[V]) Replace(v V) V {
+	p.s.Lock()
+	defer p.s.Unlock()
+
 	n := p.newNode(v)
 
 	// Replace the parent.
-	n.Parent = p.node.Parent
+	n.Parent = p.s.node.Parent
 	if n.Parent != nil {
 		for i := range n.Parent.Children {
-			if n.Parent.Children[i] == p.node {
+			if n.Parent.Children[i] == p.s.node {
 				n.Parent.Children[i] = n
 				break
 			}
@@ -245,130 +260,21 @@ func (p *Parser[V]) Replace(v V) V {
 	}
 
 	// Replace children. Preserve nil,non-nil slice.
-	if p.node.Children != nil {
-		n.Children = make([]*Node[V], len(p.node.Children))
-		for i := range p.node.Children {
-			n.Children[i] = p.node.Children[i]
+	if p.s.node.Children != nil {
+		n.Children = make([]*Node[V], len(p.s.node.Children))
+		for i := range p.s.node.Children {
+			n.Children[i] = p.s.node.Children[i]
 			n.Children[i].Parent = n
 		}
 	}
 
-	if p.node == p.root {
-		p.root = n
+	// If we are currently at the root, replace the root reference as well.
+	if p.s.node == p.s.root {
+		p.s.root = n
 	}
-	oldVal := p.node.Value
-	p.node = n
+
+	oldVal := p.s.node.Value
+	p.s.node = n
 
 	return oldVal
-}
-
-// RotateLeft performs a left rotation in the case of a binary tree at the
-// current tree location and returns the new root of the rotated sub-tree.
-// If the current node has no right child, this method is a no-op.
-//
-// See: https://en.wikipedia.org/wiki/Tree_rotation
-func (p *Parser[V]) RotateLeft() *Node[V] {
-	// The tree is rotated as follows. The nodes A, B, C are root nodes of
-	// potential sub-trees.
-	/*
-	 *      P                       Q
-	 *  /       \               /       \
-	 *  A       Q       ->      P       C
-	 *      /       \       /       \
-	 *      B       C       A       B
-	 */
-	subRoot := p.node
-	subRootParent := subRoot.Parent
-
-	// Let Q be P's right child.
-	q := subRoot.Right()
-	if q == nil {
-		return p.node
-	}
-
-	// Set P's right child to be Q's left child.
-	// [Set Q's left-child's parent to P]
-	subRoot.SetRight(q.Left())
-
-	// Set Q's left child to be P.
-	// [Set P's parent to Q]
-	q.SetLeft(subRoot)
-
-	// Update the sub-root's parent.
-	if subRootParent != nil {
-		for i := range subRootParent.Children {
-			if subRootParent.Children[i] == subRoot {
-				subRootParent.Children[i] = q
-				q.Parent = subRootParent
-				break
-			}
-		}
-	} else {
-		q.Parent = nil
-	}
-
-	// Update the current location.
-	p.node = q
-	// Update the root node if necessary.
-	if subRoot == p.root {
-		p.root = p.node
-	}
-
-	return p.node
-}
-
-// RotateRight performs a right rotation in the case of a binary tree and returns
-// the new root of the rotated sub-tree.
-// If the current node has no left child, this method is a no-op.
-//
-// See: https://en.wikipedia.org/wiki/Tree_rotation
-func (p *Parser[V]) RotateRight() *Node[V] {
-	// The tree is rotated as follows. The nodes A, B, C are root nodes of
-	// potential sub-trees.
-	/*
-	 *          P                       Q
-	 *      /       \               /       \
-	 *      Q       C       ->      A       P
-	 *  /       \                       /       \
-	 *  A       B                       B       C
-	 */
-
-	subRoot := p.node
-	subRootParent := subRoot.Parent
-
-	// Let Q be P's left child.
-	q := subRoot.Left()
-	if q == nil {
-		return p.node
-	}
-
-	// Set P's left child to be Q's right child.
-	// [Set Q's right-child's parent to P]
-	subRoot.SetLeft(q.Right())
-
-	// Set Q's right child to be P.
-	// [Set P's parent to Q]
-	q.SetRight(subRoot)
-
-	// Update the sub-root's parent.
-	if subRootParent != nil {
-		for i := range subRootParent.Children {
-			if subRootParent.Children[i] == subRoot {
-				subRootParent.Children[i] = q
-				q.Parent = subRootParent
-				break
-			}
-		}
-	} else {
-		q.Parent = nil
-	}
-
-	// Update the current location.
-	p.node = q
-	// Update the root node if necessary.
-	if subRoot == p.root {
-		p.root = p.node
-	}
-
-	return p.node
 }

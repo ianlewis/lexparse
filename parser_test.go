@@ -41,24 +41,27 @@ func addParent[V comparable](n *Node[V]) *Node[V] {
 }
 
 // testLexer creates and returns a lexer.
-func testLexer(t *testing.T, input string) (<-chan *Lexeme, context.CancelFunc) {
+func testLexer(t *testing.T, input string) <-chan *Lexeme {
 	t.Helper()
 
-	l := NewLexer(runeio.NewReader(strings.NewReader(input)), &wordState{})
+	// Run the lexer filling the channel buffer. Test input should not exceed this buffer.
+	lexemes := make(chan *Lexeme, 1024)
+	l := NewLexer(runeio.NewReader(strings.NewReader(input)), lexemes, &lexWordState{})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	return l.Lex(ctx), cancel
+	if err := l.Lex(context.Background()); err != nil {
+		panic(err)
+	}
+
+	return lexemes
 }
 
 // testParse creates and runs a lexer, and returns the root of the parse tree.
 func testParse(t *testing.T, input string) (*Node[string], error) {
 	t.Helper()
 
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	lexemes := testLexer(t, input)
 
-	p := NewParser[string](lexemes)
-	pFn := func(_ context.Context, p *Parser[string]) (ParseFn[string], error) {
+	p := NewParser[string](lexemes, ParseStateFn(func(_ context.Context, p *Parser[string]) (ParseState[string], error) {
 		for {
 			lexeme := p.Next()
 			if lexeme == nil {
@@ -78,25 +81,24 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 			}
 		}
 		return nil, nil
-	}
+	}))
 
-	ctx := context.Background()
-	root, err := p.Parse(ctx, pFn)
+	root, err := p.Parse(context.Background())
 	return root, err
 }
 
 func TestParser_new(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
 	expectedRoot := &Node[string]{}
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Fatalf("NewParser: p.root (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRoot, p.s.root); diff != "" {
+		t.Fatalf("NewParser: p.s.root (-want, +got): \n%s", diff)
 	}
 
-	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
-		t.Errorf("NewParser: p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRoot, p.s.node); diff != "" {
+		t.Errorf("NewParser: p.s.node (-want, +got): \n%s", diff)
 	}
 }
 
@@ -156,10 +158,9 @@ func TestParser_NextPeek(t *testing.T) {
 	t.Parallel()
 
 	input := "A B C"
-	lexemes, cancel := testLexer(t, input)
-	defer cancel()
+	lexemes := testLexer(t, input)
 
-	p := NewParser[string](lexemes)
+	p := NewParser[string](lexemes, nil)
 
 	// expect to read the first lexeme "A"
 	lexemeA := p.Next()
@@ -214,7 +215,7 @@ func TestParser_NextPeek(t *testing.T) {
 func TestParser_Node(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
 	child1 := p.Node("A")
 	expectedRootA := newTree(
@@ -227,8 +228,8 @@ func TestParser_Node(t *testing.T) {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
 	// Current node is still set to root.
-	if diff := cmp.Diff(p.root, p.node); diff != "" {
-		t.Errorf("p.node: (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(p.s.root, p.s.node); diff != "" {
+		t.Errorf("p.s.node: (-want, +got): \n%s", diff)
 	}
 
 	child2 := p.Node("B")
@@ -245,21 +246,21 @@ func TestParser_Node(t *testing.T) {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
 	// Current node is still set to root.
-	if diff := cmp.Diff(p.root, p.node); diff != "" {
-		t.Errorf("p.node: (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(p.s.root, p.s.node); diff != "" {
+		t.Errorf("p.s.node: (-want, +got): \n%s", diff)
 	}
 
-	if diff := cmp.Diff(expectedRootB, p.root); diff != "" {
-		t.Fatalf("Node: p.root (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRootB, p.s.root); diff != "" {
+		t.Fatalf("Node: p.s.root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_ClimbPos(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
-	p.root = newTree(
+	p.s.root = newTree(
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
@@ -270,44 +271,44 @@ func TestParser_ClimbPos(t *testing.T) {
 		},
 	)
 	// Current node is Node B
-	p.node = p.root.Children[0].Children[0]
+	p.s.node = p.s.root.Children[0].Children[0]
 
 	// Climb returns Node B
-	if diff := cmp.Diff(p.root.Children[0].Children[0], p.Climb()); diff != "" {
+	if diff := cmp.Diff(p.s.root.Children[0].Children[0], p.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to Node A
-	if diff := cmp.Diff(p.root.Children[0], p.node); diff != "" {
-		t.Errorf("p.node: (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(p.s.root.Children[0], p.s.node); diff != "" {
+		t.Errorf("p.s.node: (-want, +got): \n%s", diff)
 	}
 	// Pos returns Node A
-	if diff := cmp.Diff(p.root.Children[0], p.Pos()); diff != "" {
+	if diff := cmp.Diff(p.s.root.Children[0], p.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
 	// Climb returns Node A
-	if diff := cmp.Diff(p.root.Children[0], p.Climb()); diff != "" {
+	if diff := cmp.Diff(p.s.root.Children[0], p.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to root node.
-	if diff := cmp.Diff(p.root, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(p.s.root, p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
 	// Pos returns root node.
-	if diff := cmp.Diff(p.root, p.Pos()); diff != "" {
+	if diff := cmp.Diff(p.s.root, p.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
 	// Climb returns root node.
-	if diff := cmp.Diff(p.root, p.Climb()); diff != "" {
+	if diff := cmp.Diff(p.s.root, p.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to root node.
-	if diff := cmp.Diff(p.root, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(p.s.root, p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
 	// Pos returns root node.
-	if diff := cmp.Diff(p.root, p.Pos()); diff != "" {
+	if diff := cmp.Diff(p.s.root, p.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 }
@@ -315,7 +316,7 @@ func TestParser_ClimbPos(t *testing.T) {
 func TestParser_Push(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
 	valA := "A"
 	expectedRootA := newTree(
@@ -326,11 +327,11 @@ func TestParser_Push(t *testing.T) {
 	if diff := cmp.Diff(expectedRootA.Children[0], p.Push(valA)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valA, diff)
 	}
-	if diff := cmp.Diff(expectedRootA.Children[0], p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRootA.Children[0], p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
-	if diff := cmp.Diff(expectedRootA, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRootA, p.s.root); diff != "" {
+		t.Errorf("p.s.root (-want, +got): \n%s", diff)
 	}
 
 	valB := "B"
@@ -347,20 +348,20 @@ func TestParser_Push(t *testing.T) {
 	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.Push(valB)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valB, diff)
 	}
-	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
-	if diff := cmp.Diff(expectedRootB, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRootB, p.s.root); diff != "" {
+		t.Errorf("p.s.root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_Replace(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
-	p.root = newTree(
+	p.s.root = newTree(
 		&Node[string]{
 			Value: "A",
 			Children: []*Node[string]{
@@ -371,7 +372,7 @@ func TestParser_Replace(t *testing.T) {
 		},
 	)
 	// Current node is Node A
-	p.node = p.root.Children[0]
+	p.s.node = p.s.root.Children[0]
 
 	// Replace Node A with C
 	valC := "C"
@@ -390,19 +391,19 @@ func TestParser_Replace(t *testing.T) {
 		},
 	)
 	// Current node is set to Node C.
-	if diff := cmp.Diff(expectedRoot.Children[0], p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRoot.Children[0], p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRoot, p.s.root); diff != "" {
+		t.Errorf("p.s.root (-want, +got): \n%s", diff)
 	}
 }
 
 func TestParser_Replace_root(t *testing.T) {
 	t.Parallel()
 
-	p := NewParser[string](nil)
+	p := NewParser[string](nil, nil)
 
 	// Replace root node with A
 	valA := "A"
@@ -415,443 +416,11 @@ func TestParser_Replace_root(t *testing.T) {
 	}
 
 	// Current node is set to root node.
-	if diff := cmp.Diff(expectedRoot, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
+	if diff := cmp.Diff(expectedRoot, p.s.node); diff != "" {
+		t.Errorf("p.s.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateLeft(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = newTree(
-		&Node[string]{
-			Value: "P",
-			Children: []*Node[string]{
-				{
-					Value: "A",
-				},
-				{
-					Value: "Q",
-					Children: []*Node[string]{
-						{
-							Value: "B",
-						},
-						{
-							Value: "C",
-						},
-					},
-				},
-			},
-		},
-	)
-
-	// Current node is Node P
-	p.node = p.root.Children[0]
-
-	newSubRoot := p.RotateLeft()
-
-	// Expect that Q is rotated above P.
-	expectedRoot := newTree(
-		&Node[string]{
-			Value: "Q",
-			Children: []*Node[string]{
-				{
-					Value: "P",
-					Children: []*Node[string]{
-						{
-							Value: "A",
-						},
-						{
-							Value: "B",
-						},
-					},
-				},
-				{
-					Value: "C",
-				},
-			},
-		},
-	)
-	expectedSubRoot := expectedRoot.Children[0]
-
-	// The new parent Node Q is returned.
-	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
-		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
-	}
-	// Current node is set to Q
-	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
-	}
-	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateLeft_root(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = addParent(
-		&Node[string]{
-			Value: "P",
-			Children: []*Node[string]{
-				{
-					Value: "A",
-				},
-				{
-					Value: "Q",
-					Children: []*Node[string]{
-						{
-							Value: "B",
-						},
-						{
-							Value: "C",
-						},
-					},
-				},
-			},
-		},
-	)
-	// Current node is Node P
-	p.node = p.root
-
-	newSubRoot := p.RotateLeft()
-
-	// Expect that Q is rotated above P.
-	expectedSubRoot := addParent(
-		&Node[string]{
-			Value: "Q",
-			Children: []*Node[string]{
-				{
-					Value: "P",
-					Children: []*Node[string]{
-						{
-							Value: "A",
-						},
-						{
-							Value: "B",
-						},
-					},
-				},
-				{
-					Value: "C",
-				},
-			},
-		},
-	)
-
-	// The new parent Node Q is returned.
-	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
-		t.Fatalf("RotateLeft: (-want, +got): \n%s", diff)
-	}
-	// Current node is set to Q
-	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
-	}
-	// Full tree has expected values.
-	if diff := cmp.Diff(expectedSubRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateLeft_empty(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	n := p.RotateLeft()
-	if diff := cmp.Diff(p.node, n); diff != "" {
-		t.Fatalf("RotateLeft: n (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateRight(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = newTree(
-		&Node[string]{
-			Value: "P",
-			Children: []*Node[string]{
-				{
-					Value: "Q",
-					Children: []*Node[string]{
-						{
-							Value: "A",
-						},
-						{
-							Value: "B",
-						},
-					},
-				},
-				{
-					Value: "C",
-				},
-			},
-		},
-	)
-
-	// Current node is Node P
-	p.node = p.root.Children[0]
-
-	newSubRoot := p.RotateRight()
-
-	// Expect that Q is rotated above P.
-	expectedRoot := newTree(
-		&Node[string]{
-			Value: "Q",
-			Children: []*Node[string]{
-				{
-					Value: "A",
-				},
-				{
-					Value: "P",
-					Children: []*Node[string]{
-						{
-							Value: "B",
-						},
-						{
-							Value: "C",
-						},
-					},
-				},
-			},
-		},
-	)
-	expectedSubRoot := expectedRoot.Children[0]
-
-	// The new parent Node Q is returned.
-	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
-		t.Fatalf("RotateRight: (-want, +got): \n%s", diff)
-	}
-	// Current node is set to Q
-	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
-	}
-	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateRight_root(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	p.root = addParent(
-		&Node[string]{
-			Value: "P",
-			Children: []*Node[string]{
-				{
-					Value: "Q",
-					Children: []*Node[string]{
-						{
-							Value: "A",
-						},
-						{
-							Value: "B",
-						},
-					},
-				},
-				{
-					Value: "C",
-				},
-			},
-		},
-	)
-	// Current node is Node P
-	p.node = p.root
-
-	newSubRoot := p.RotateRight()
-
-	// Expect that Q is rotated above P.
-	expectedSubRoot := addParent(
-		&Node[string]{
-			Value: "Q",
-			Children: []*Node[string]{
-				{
-					Value: "A",
-				},
-				{
-					Value: "P",
-					Children: []*Node[string]{
-						{
-							Value: "B",
-						},
-						{
-							Value: "C",
-						},
-					},
-				},
-			},
-		},
-	)
-
-	// The new parent Node Q is returned.
-	if diff := cmp.Diff(expectedSubRoot, newSubRoot); diff != "" {
-		t.Fatalf("RotateRight: (-want, +got): \n%s", diff)
-	}
-	// Current node is set to Q
-	if diff := cmp.Diff(expectedSubRoot, p.node); diff != "" {
-		t.Errorf("p.node (-want, +got): \n%s", diff)
-	}
-	// Full tree has expected values.
-	if diff := cmp.Diff(expectedSubRoot, p.root); diff != "" {
-		t.Errorf("p.root (-want, +got): \n%s", diff)
-	}
-}
-
-func TestParser_RotateRight_empty(t *testing.T) {
-	t.Parallel()
-
-	p := NewParser[string](nil)
-
-	n := p.RotateRight()
-	if diff := cmp.Diff(p.node, n); diff != "" {
-		t.Fatalf("RotateRight: n (-want, +got): \n%s", diff)
-	}
-}
-
-func TestNode_SetLeft_from_nil(t *testing.T) {
-	t.Parallel()
-
-	root := newTree[string]()
-
-	if root.Left() != nil {
-		t.Errorf("root.Left(): want %v got %v", nil, root.Left())
-	}
-
-	newLeft := &Node[string]{Value: "newLeft"}
-	oldLeft := root.SetLeft(newLeft)
-	if oldLeft != nil {
-		t.Errorf("oldLeft: want %v got %v", nil, oldLeft)
-	}
-
-	if root.Left() != newLeft {
-		t.Errorf("root.Left(): want %v got %v", newLeft, root.Left())
-	}
-
-	if newLeft.Parent != root {
-		t.Errorf("newLeft.Parent: want %v got %v", root, newLeft.Parent)
-	}
-}
-
-func TestNode_SetLeft_update(t *testing.T) {
-	t.Parallel()
-
-	root := newTree(
-		&Node[string]{Value: "left"},
-		&Node[string]{Value: "right"},
-	)
-
-	left := root.Left()
-	newLeft := &Node[string]{Value: "newLeft"}
-	oldLeft := root.SetLeft(newLeft)
-	if oldLeft != left {
-		t.Errorf("oldLeft: want %v got %v", left, oldLeft)
-	}
-
-	if root.Left() != newLeft {
-		t.Errorf("root.Left(): want %v got %v", newLeft, root.Left())
-	}
-
-	if newLeft.Parent != root {
-		t.Errorf("newLeft.Parent: want %v got %v", root, newLeft.Parent)
-	}
-}
-
-func TestNode_SetLeft_update_nil(t *testing.T) {
-	t.Parallel()
-
-	root := newTree(
-		&Node[string]{Value: "left"},
-		&Node[string]{Value: "right"},
-	)
-
-	left := root.Left()
-	oldLeft := root.SetLeft(nil)
-	if oldLeft != left {
-		t.Errorf("oldLeft: want %v got %v", left, oldLeft)
-	}
-
-	if root.Left() != nil {
-		t.Errorf("root.Left(): want %v got %v", nil, root.Left())
-	}
-}
-
-func TestNode_SetRight_from_nil(t *testing.T) {
-	t.Parallel()
-
-	root := newTree[string]()
-
-	if root.Right() != nil {
-		t.Errorf("root.Right(): want %v got %v", nil, root.Right())
-	}
-
-	newRight := &Node[string]{Value: "newRight"}
-	oldRight := root.SetRight(newRight)
-	if oldRight != nil {
-		t.Errorf("oldRight: want %v got %v", nil, oldRight)
-	}
-
-	if root.Right() != newRight {
-		t.Errorf("root.Right(): want %v got %v", newRight, root.Right())
-	}
-
-	if newRight.Parent != root {
-		t.Errorf("newRight.Parent: want %v got %v", root, newRight.Parent)
-	}
-}
-
-func TestNode_SetRight_update(t *testing.T) {
-	t.Parallel()
-
-	root := newTree(
-		&Node[string]{Value: "left"},
-		&Node[string]{Value: "right"},
-	)
-
-	right := root.Right()
-	newRight := &Node[string]{Value: "newRight"}
-	oldRight := root.SetRight(newRight)
-	if oldRight != right {
-		t.Errorf("oldRight: want %v got %v", right, oldRight)
-	}
-
-	if root.Right() != newRight {
-		t.Errorf("root.Right(): want %v got %v", newRight, root.Right())
-	}
-
-	if newRight.Parent != root {
-		t.Errorf("newRight.Parent: want %v got %v", root, newRight.Parent)
-	}
-}
-
-func TestNode_SetRight_update_nil(t *testing.T) {
-	t.Parallel()
-
-	root := newTree(
-		&Node[string]{Value: "left"},
-		&Node[string]{Value: "right"},
-	)
-
-	right := root.Right()
-	oldRight := root.SetRight(nil)
-	if oldRight != right {
-		t.Errorf("oldRight: want %v got %v", right, oldRight)
-	}
-
-	if root.Right() != nil {
-		t.Errorf("root.Right(): want %v got %v", nil, root.Right())
+	if diff := cmp.Diff(expectedRoot, p.s.root); diff != "" {
+		t.Errorf("p.s.root (-want, +got): \n%s", diff)
 	}
 }

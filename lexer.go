@@ -49,29 +49,30 @@ type BufferedRuneReader interface {
 // LexemeType is a user-defined Lexeme type.
 type LexemeType int
 
-// State is the state of the current lexing state machine. It defines the logic
+// LexState is the state of the current lexing state machine. It defines the logic
 // to process the current state and returns the next state.
-type State interface {
+type LexState interface {
 	// Run returns the next state to transition to or an error. If the returned
 	// next state is nil or the returned error is io.EOF then the Lexer
 	// finishes processing normally.
-	Run(context.Context, *Lexer) (State, error)
+	Run(context.Context, *Lexer) (LexState, error)
 }
 
-type fnState struct {
-	f func(context.Context, *Lexer) (State, error)
+type lexFnState struct {
+	f func(context.Context, *Lexer) (LexState, error)
 }
 
-func (s *fnState) Run(ctx context.Context, l *Lexer) (State, error) {
+// Run implements LexState.Run.
+func (s *lexFnState) Run(ctx context.Context, l *Lexer) (LexState, error) {
 	if s.f == nil {
 		return nil, nil
 	}
 	return s.f(ctx, l)
 }
 
-// StateFn creates a State from the given Run function.
-func StateFn(f func(context.Context, *Lexer) (State, error)) State {
-	return &fnState{f}
+// LexStateFn creates a State from the given Run function.
+func LexStateFn(f func(context.Context, *Lexer) (LexState, error)) LexState {
+	return &lexFnState{f}
 }
 
 // Lexeme is a tokenized input which can be emitted by a Lexer.
@@ -93,23 +94,17 @@ type Lexeme struct {
 }
 
 // Lexer lexically processes a byte stream. It is implemented as a finite-state
-// machine in which each [State] implements it's own processing.
+// machine in which each [LexState] implements it's own processing.
 //
 // A Lexer maintains an internal cursor which marks the start of the next
 // lexeme being currently processed. The Lexer can then advance the reader to
 // find the end of the lexeme before emitting it.
 type Lexer struct {
 	// lexemes is a channel into which Lexeme's will be emitted.
-	lexemes chan *Lexeme
-
-	// stop is the stop channel
-	stop chan struct{}
-
-	// done is the done channel
-	done chan struct{}
+	lexemes chan<- *Lexeme
 
 	// state is the current state of the Lexer.
-	state State
+	state LexState
 
 	// s is the current input/pos/lexeme state.
 	s struct {
@@ -139,19 +134,16 @@ type Lexer struct {
 
 		// startColumn is the column of the current lexeme.
 		startColumn int
-
-		// err holds the last lexing error.
-		err error
 	}
 }
 
-// NewLexer creates a new Lexer initialized with the given starting [State].
-func NewLexer(r BufferedRuneReader, startingState State) *Lexer {
+// NewLexer creates a new Lexer initialized with the given starting [LexState].
+// The Lexer takes ownership of the lexemes channel and closes it when lexing
+// is completed.
+func NewLexer(r BufferedRuneReader, lexemes chan<- *Lexeme, startingState LexState) *Lexer {
 	l := &Lexer{
 		state:   startingState,
-		lexemes: make(chan *Lexeme, 1024),
-		stop:    make(chan struct{}),
-		done:    make(chan struct{}),
+		lexemes: lexemes,
 	}
 	l.s.r = r
 	return l
@@ -160,66 +152,59 @@ func NewLexer(r BufferedRuneReader, startingState State) *Lexer {
 // Pos returns the current position of the underlying reader.
 func (l *Lexer) Pos() int {
 	l.s.Lock()
-	pos := l.s.pos
-	l.s.Unlock()
-	return pos
+	defer l.s.Unlock()
+	return l.s.pos
 }
 
 // Cursor returns the current position of the underlying cursor marking the
 // beginning of the current lexeme being processed.
 func (l *Lexer) Cursor() int {
 	l.s.Lock()
-	pos := l.s.startPos
-	l.s.Unlock()
-	return pos
+	defer l.s.Unlock()
+	return l.s.startPos
 }
 
 // Token returns the current lexeme token value.
 func (l *Lexer) Token() string {
 	l.s.Lock()
-	t := l.s.b.String()
-	l.s.Unlock()
-	return t
+	defer l.s.Unlock()
+	return l.s.b.String()
 }
 
 // Width returns the current width of the lexeme being processed. It is
 // equivalent to l.Pos() - l.Cursor().
 func (l *Lexer) Width() int {
 	l.s.Lock()
-	w := l.s.pos - l.s.startPos
-	l.s.Unlock()
-	return w
+	defer l.s.Unlock()
+	return l.s.pos - l.s.startPos
 }
 
 // Line returns the current line in the input (one-based).
 func (l *Lexer) Line() int {
 	l.s.Lock()
-	line := l.s.line + 1
-	l.s.Unlock()
-	return line
+	defer l.s.Unlock()
+	return l.s.line + 1
 }
 
 // Column returns the current column in the input (one-based).
 func (l *Lexer) Column() int {
 	l.s.Lock()
-	c := l.s.column + 1
-	l.s.Unlock()
-	return c
+	defer l.s.Unlock()
+	return l.s.column + 1
 }
 
 // ReadRune returns the next rune of input, advancing the reader while not
 // advancing the cursor.
 func (l *Lexer) ReadRune() (rune, int, error) {
 	l.s.Lock()
-	rn, i, err := l.readrune()
-	l.s.Unlock()
-	return rn, i, err
+	defer l.s.Unlock()
+	return l.readrune()
 }
 
 func (l *Lexer) readrune() (rune, int, error) {
 	rn, n, err := l.s.r.ReadRune()
 	if err != nil {
-		//nolint:wrapcheck // Error doesn't need to be wrapped.
+		//nolint:wrapcheck // Error should not be wrapped as it could be io.EOF
 		return 0, 0, err
 	}
 
@@ -252,9 +237,8 @@ func (l *Lexer) Peek(n int) ([]rune, error) {
 // current lexeme position.
 func (l *Lexer) Advance(n int) (int, error) {
 	l.s.Lock()
-	a, err := l.advance(n, false)
-	l.s.Unlock()
-	return a, err
+	defer l.s.Unlock()
+	return l.advance(n, false)
 }
 
 func (l *Lexer) advance(n int, discard bool) (int, error) {
@@ -326,9 +310,8 @@ func (l *Lexer) advance(n int, discard bool) (int, error) {
 // cursor position.
 func (l *Lexer) Discard(n int) (int, error) {
 	l.s.Lock()
-	d, err := l.advance(n, true)
-	l.s.Unlock()
-	return d, err
+	defer l.s.Unlock()
+	return l.advance(n, true)
 }
 
 // Find searches the input for one of the given tokens, advancing the reader,
@@ -427,60 +410,44 @@ func (l *Lexer) ignore() {
 	l.s.b.Reset()
 }
 
-// Lex starts a new goroutine to parse the content. Run is called on each state
-// starting with the initial state. Each state then returns the subsequent state
-// which is run until a state returns nil indicating that lexing has finished.
+// Lex parses the content and passes lexemes to the given channel. Run is
+// called on each [LexState] starting with the initial state. Each [LexState]
+// then returns the subsequent state which is run until a state returns nil
+// indicating that lexing has finished.
 //
-// The caller can request that the lexer stop by cancelling ctx. The
-// returned channel is closed when the Lexer is finished running.
-func (l *Lexer) Lex(ctx context.Context) <-chan *Lexeme {
-	// This goroutine runs the lexer. It will return and close the done and
-	// lexemes channels if the context is done.
-	go func() {
-		var err error
-		defer close(l.done)
-		defer close(l.lexemes)
-		for l.state != nil {
-			select {
-			case <-ctx.Done():
-				l.setErr(ctx.Err())
-				return
-			default:
-			}
+// Note that a separate goroutine should process lexemes passed to the lexemes
+// channel or Lex will block indefinitely when the channel buffer is filled.
+//
+// The caller can request that the lexer stop by cancelling ctx.
+func (l *Lexer) Lex(ctx context.Context) error {
+	// Set the channel to support calls back into the Lexer.
+	defer close(l.lexemes)
 
-			l.state, err = l.state.Run(ctx, l)
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					l.setErr(err)
-				}
-				return
+	for l.state != nil {
+		select {
+		case <-ctx.Done():
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("lexing: %w", err)
 			}
+			return nil
+		default:
 		}
-	}()
 
-	return l.lexemes
-}
-
-// setErr sets the lexer's error value.
-func (l *Lexer) setErr(err error) {
-	l.s.Lock()
-	if l.s.err == nil {
-		l.s.err = err
+		var err error
+		l.state, err = l.state.Run(ctx, l)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return fmt.Errorf("lexing: %w", err)
+		}
 	}
-	l.s.Unlock()
-}
 
-// Err returns the last encountered error.
-func (l *Lexer) Err() error {
-	l.s.Lock()
-	err := l.s.err
-	l.s.Unlock()
-	return err
-}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("lexing: %w", err)
+	}
 
-// Done returns a channel that is closed when the lexer is finished running.
-func (l *Lexer) Done() <-chan struct{} {
-	return l.done
+	return nil
 }
 
 // Emit emits the lexeme between the the current cursor position and reader
@@ -490,6 +457,7 @@ func (l *Lexer) Emit(typ LexemeType) *Lexeme {
 	if l.lexemes == nil {
 		return nil
 	}
+
 	l.s.Lock()
 	lexeme := &Lexeme{
 		Type:   typ,
@@ -500,11 +468,8 @@ func (l *Lexer) Emit(typ LexemeType) *Lexeme {
 	}
 	l.s.Unlock()
 
-	select {
-	case l.lexemes <- lexeme:
-		l.Ignore()
-	case <-l.stop:
-	}
+	l.lexemes <- lexeme
+	l.Ignore()
 
-	return nil
+	return lexeme
 }

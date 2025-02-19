@@ -55,7 +55,7 @@ type tmplNode struct {
 }
 
 // lexText tokenizes normal text.
-func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	// Search the input for left brackets.
 	token, err := l.Find([]string{actionLeft})
 
@@ -68,9 +68,9 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	}
 
 	// Progress to lexing the action if brackets are found.
-	var nextState lexparse.State
+	var nextState lexparse.LexState
 	if token == actionLeft {
-		nextState = lexparse.StateFn(lexAction)
+		nextState = lexparse.LexStateFn(lexAction)
 	}
 
 	if err != nil {
@@ -81,7 +81,7 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 }
 
 // lexAction tokenizes replacement actions (e.g. {{ var }}).
-func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
+func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	// Discard the left brackets
 	if _, err := l.Discard(len(actionLeft)); err != nil {
 		return nil, fmt.Errorf("lexing action: %w", err)
@@ -91,7 +91,7 @@ func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 	token, err := l.Find([]string{actionRight})
 
 	// Process the token if the right bracket is found.
-	var nextState lexparse.State
+	var nextState lexparse.LexState
 	if token == actionRight {
 		// Emit the lexeme.
 		if l.Width() > 0 {
@@ -102,7 +102,7 @@ func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 		if _, errDiscard := l.Discard(len(actionRight)); errDiscard != nil {
 			return nil, fmt.Errorf("lexing action: %w", errDiscard)
 		}
-		nextState = lexparse.StateFn(lexText)
+		nextState = lexparse.LexStateFn(lexText)
 	}
 
 	if err != nil {
@@ -117,7 +117,7 @@ func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.State, error) {
 }
 
 // parseInit delegates to another parse function based on lexeme type.
-func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
 	l := p.Peek()
 	if l == nil {
 		return nil, nil
@@ -125,9 +125,9 @@ func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Parse
 
 	switch l.Type {
 	case textType:
-		return parseText, nil
+		return lexparse.ParseStateFn(parseText), nil
 	case actionType:
-		return parseAction, nil
+		return lexparse.ParseStateFn(parseAction), nil
 	default:
 		// NOTE: This shouldn't happen.
 		return nil, fmt.Errorf("%w: %v", errType, l.Type)
@@ -135,7 +135,7 @@ func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Parse
 }
 
 // parseText handles normal text.
-func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
 	// Get the next lexeme from the parser.
 	l := p.Next()
 	if l == nil {
@@ -148,11 +148,11 @@ func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Parse
 	})
 
 	// Return to the init state.
-	return parseInit, nil
+	return lexparse.ParseStateFn(parseInit), nil
 }
 
 // parseAction handles replacement actions (e.g. {{ var }}).
-func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseFn[*tmplNode], error) {
+func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
 	// Get the next lexeme from the parser.
 	l := p.Next()
 	if l == nil {
@@ -166,7 +166,7 @@ func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.Par
 	})
 
 	// Return to the init state.
-	return parseInit, nil
+	return lexparse.ParseStateFn(parseInit), nil
 }
 
 // Execute renders the template with the given data.
@@ -200,8 +200,14 @@ func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 // This example includes some best practices for error handling, such as
 // including line and column numbers in error messages.
 func Example_templateEngine() {
+	lexemes := make(chan *lexparse.Lexeme, 1024)
 	r := runeio.NewReader(strings.NewReader("Hello, {{ subject }}"))
-	t, err := lexparse.LexParse(context.Background(), r, lexparse.StateFn(lexText), parseInit)
+
+	t, err := lexparse.LexParse(
+		context.Background(),
+		lexparse.NewLexer(r, lexemes, lexparse.LexStateFn(lexText)),
+		lexparse.NewParser(lexemes, lexparse.ParseStateFn(parseInit)),
+	)
 	if err != nil {
 		panic(err)
 	}
