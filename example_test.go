@@ -39,7 +39,6 @@ const (
 var (
 	errType           = errors.New("unexpected type")
 	errUnclosedAction = errors.New("unclosed action")
-	errSymbol         = errors.New("invalid symbol")
 )
 
 type nodeType int
@@ -181,7 +180,7 @@ func execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 			// Replace templated variables with given data.
 			val, ok := data[n.Value.action]
 			if !ok {
-				return b.String(), fmt.Errorf("%w: %q at line %d, column %d", errSymbol, n.Value.action, n.Line+1, n.Column+1)
+				val = ""
 			}
 			b.WriteString(val)
 		}

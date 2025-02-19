@@ -114,32 +114,32 @@ func TestParser_parse_op2(t *testing.T) {
 	// Does the tree look as expected?
 	expectedRoot := newTree(&Node[string]{
 		Value:  "push",
-		Line:   0,
-		Column: 0,
+		Line:   1,
+		Column: 1,
 		Pos:    0,
 		Children: []*Node[string]{
 			{
 				Value:  "1",
-				Line:   0,
-				Column: 5,
+				Line:   1,
+				Column: 6,
 				Pos:    5,
 			},
 			{
 				Value:  "push",
-				Line:   0,
-				Column: 7,
+				Line:   1,
+				Column: 8,
 				Pos:    7,
 				Children: []*Node[string]{
 					{
 						Value:  "2",
-						Line:   0,
-						Column: 12,
+						Line:   1,
+						Column: 13,
 						Pos:    12,
 					},
 					{
 						Value:  "3",
-						Line:   0,
-						Column: 14,
+						Line:   1,
+						Column: 15,
 						Pos:    14,
 					},
 				},
@@ -167,8 +167,8 @@ func TestParser_NextPeek(t *testing.T) {
 		Type:   wordType,
 		Value:  "A",
 		Pos:    0,
-		Line:   0,
-		Column: 0,
+		Line:   1,
+		Column: 1,
 	}
 	if diff := cmp.Diff(wantLexemeA, lexemeA); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
@@ -179,8 +179,8 @@ func TestParser_NextPeek(t *testing.T) {
 		Type:   wordType,
 		Value:  "B",
 		Pos:    2,
-		Line:   0,
-		Column: 2,
+		Line:   1,
+		Column: 3,
 	}
 	if diff := cmp.Diff(wantLexemeB, peekLexemeB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
@@ -197,8 +197,8 @@ func TestParser_NextPeek(t *testing.T) {
 		Type:   wordType,
 		Value:  "C",
 		Pos:    4,
-		Line:   0,
-		Column: 4,
+		Line:   1,
+		Column: 5,
 	}
 	if diff := cmp.Diff(wantLexemeC, lexemeC); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)

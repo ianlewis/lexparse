@@ -79,11 +79,11 @@ func TestLexer_Peek(t *testing.T) {
 		t.Errorf("Pos: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.Line(), 0; got != want {
+	if got, want := l.Line(), 1; got != want {
 		t.Errorf("Line: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.Column(), 0; got != want {
+	if got, want := l.Column(), 1; got != want {
 		t.Errorf("Column: want: %v, got: %v", want, got)
 	}
 
@@ -128,11 +128,11 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 1; got != want {
+		if got, want := l.Column(), 2; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -144,11 +144,11 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 0; got != want {
+		if got, want := lexeme.Line, 1; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 0; got != want {
+		if got, want := lexeme.Column, 1; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -170,11 +170,11 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 9; got != want {
+		if got, want := l.Column(), 10; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -186,11 +186,11 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 0; got != want {
+		if got, want := lexeme.Line, 1; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 0; got != want {
+		if got, want := lexeme.Column, 1; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -224,11 +224,11 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 1; got != want {
+		if got, want := l.Column(), 2; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -240,11 +240,11 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 1; got != want {
+		if got, want := lexeme.Line, 2; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 1; got != want {
+		if got, want := lexeme.Column, 2; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -266,11 +266,11 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 9; got != want {
+		if got, want := l.Column(), 10; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -282,11 +282,11 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 1; got != want {
+		if got, want := lexeme.Line, 2; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 9; got != want {
+		if got, want := lexeme.Column, 10; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -320,11 +320,11 @@ func TestLexer_Find(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 1; got != want {
+		if got, want := l.Column(), 2; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -336,11 +336,11 @@ func TestLexer_Find(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 0; got != want {
+		if got, want := lexeme.Line, 1; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 0; got != want {
+		if got, want := lexeme.Column, 1; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -362,11 +362,11 @@ func TestLexer_Find(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 6; got != want {
+		if got, want := l.Column(), 7; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -378,11 +378,11 @@ func TestLexer_Find(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 0; got != want {
+		if got, want := lexeme.Line, 1; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 0; got != want {
+		if got, want := lexeme.Column, 1; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -416,11 +416,11 @@ func TestLexer_Ignore(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 1; got != want {
+		if got, want := l.Column(), 2; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -446,11 +446,11 @@ func TestLexer_Ignore(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 8; got != want {
+		if got, want := l.Column(), 9; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -462,11 +462,11 @@ func TestLexer_Ignore(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 1; got != want {
+		if got, want := lexeme.Line, 2; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 1; got != want {
+		if got, want := lexeme.Column, 2; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -500,11 +500,11 @@ func TestLexer_SkipTo(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 1; got != want {
+		if got, want := l.Column(), 2; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -516,11 +516,11 @@ func TestLexer_SkipTo(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 1; got != want {
+		if got, want := lexeme.Line, 2; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 1; got != want {
+		if got, want := lexeme.Column, 2; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -542,11 +542,11 @@ func TestLexer_SkipTo(t *testing.T) {
 			t.Errorf("Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Line(), 1; got != want {
+		if got, want := l.Line(), 2; got != want {
 			t.Errorf("Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Column(), 6; got != want {
+		if got, want := l.Column(), 7; got != want {
 			t.Errorf("Column: want: %v, got: %v", want, got)
 		}
 
@@ -558,11 +558,11 @@ func TestLexer_SkipTo(t *testing.T) {
 			t.Errorf("lexeme.Pos: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Line, 1; got != want {
+		if got, want := lexeme.Line, 2; got != want {
 			t.Errorf("lexeme.Line: want: %v, got: %v", want, got)
 		}
 
-		if got, want := lexeme.Column, 6; got != want {
+		if got, want := lexeme.Column, 7; got != want {
 			t.Errorf("lexeme.Column: want: %v, got: %v", want, got)
 		}
 	})
@@ -584,15 +584,15 @@ func TestLexer_lexemes(t *testing.T) {
 			Type:   wordType,
 			Value:  "Hello",
 			Pos:    0,
-			Line:   0,
-			Column: 0,
+			Line:   1,
+			Column: 1,
 		},
 		{
 			Type:   wordType,
 			Value:  "Lexemes!",
 			Pos:    6,
-			Line:   0,
-			Column: 6,
+			Line:   1,
+			Column: 7,
 		},
 	}
 	err := l.Err()
