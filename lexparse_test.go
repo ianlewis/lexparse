@@ -25,13 +25,15 @@ import (
 	"github.com/ianlewis/runeio"
 )
 
-func parseWord(_ context.Context, p *Parser[string]) (ParseFn[string], error) {
+type parseWordState struct{}
+
+func (w *parseWordState) Run(_ context.Context, p *Parser[string]) (ParseState[string], error) {
 	l := p.Next()
 	if l == nil {
 		return nil, nil
 	}
 	p.Node(l.Value)
-	return parseWord, nil
+	return w, nil
 }
 
 var (
@@ -39,11 +41,15 @@ var (
 	errParse = errors.New("errParse")
 )
 
-func errStateFn(context.Context, *Lexer) (State, error) {
+type lexErrState struct{}
+
+func (e *lexErrState) Run(context.Context, *Lexer) (LexState, error) {
 	return nil, errState
 }
 
-func errParseFn(_ context.Context, p *Parser[string]) (ParseFn[string], error) {
+type parseErrState struct{}
+
+func (e *parseErrState) Run(_ context.Context, p *Parser[string]) (ParseState[string], error) {
 	_ = p.Next()
 	return nil, errParse
 }
@@ -58,7 +64,12 @@ func TestLexParse(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		got, err := LexParse(ctx, r, &wordState{}, parseWord)
+
+		lexemes := make(chan *Lexeme, 1024)
+		lexer := NewLexer(r, lexemes, &lexWordState{})
+		parser := NewParser[string](lexemes, &parseWordState{})
+
+		got, err := LexParse(ctx, lexer, parser)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -91,7 +102,12 @@ func TestLexParse(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		_, got := LexParse(ctx, r, StateFn(errStateFn), errParseFn)
+
+		lexemes := make(chan *Lexeme, 1024)
+		lexer := NewLexer(r, lexemes, &lexErrState{})
+		parser := NewParser[string](lexemes, &parseErrState{})
+
+		_, got := LexParse(ctx, lexer, parser)
 		want := errState
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)
@@ -106,7 +122,12 @@ func TestLexParse(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		_, got := LexParse(ctx, r, &wordState{}, errParseFn)
+
+		lexemes := make(chan *Lexeme, 1024)
+		lexer := NewLexer(r, lexemes, &lexWordState{})
+		parser := NewParser[string](lexemes, &parseErrState{})
+
+		_, got := LexParse(ctx, lexer, parser)
 		want := errParse
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)

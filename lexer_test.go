@@ -31,9 +31,9 @@ const (
 	wordType
 )
 
-type wordState struct{}
+type lexWordState struct{}
 
-func (w *wordState) Run(_ context.Context, l *Lexer) (State, error) {
+func (w *lexWordState) Run(_ context.Context, l *Lexer) (LexState, error) {
 	rn, err := l.Peek(1)
 	if errors.Is(err, io.EOF) || (err == nil && unicode.IsSpace(rn[0])) {
 		// NOTE: This can emit empty words.
@@ -57,7 +57,7 @@ func (w *wordState) Run(_ context.Context, l *Lexer) (State, error) {
 func TestLexer_Peek(t *testing.T) {
 	t.Parallel()
 
-	l := NewLexer(runeio.NewReader(strings.NewReader("Hello\nWorld!")), &wordState{})
+	l := NewLexer(runeio.NewReader(strings.NewReader("Hello\nWorld!")), nil, &lexWordState{})
 
 	rns, err := l.Peek(6)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestLexer_Advance(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Advance!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Advance!")), nil, &lexWordState{})
 
 		advanced, err := l.Advance(5)
 		if err != nil {
@@ -156,7 +156,7 @@ func TestLexer_Advance(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Advance!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Advance!")), nil, &lexWordState{})
 
 		advanced, err := l.Advance(16)
 		if !errors.Is(err, io.EOF) {
@@ -198,7 +198,7 @@ func TestLexer_Discard(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Discard!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Discard!")), nil, &lexWordState{})
 
 		discarded, err := l.Discard(7)
 		if err != nil {
@@ -244,7 +244,7 @@ func TestLexer_Discard(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Discard!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Discard!")), nil, &lexWordState{})
 
 		discarded, err := l.Discard(16)
 		if !errors.Is(err, io.EOF) {
@@ -286,7 +286,7 @@ func TestLexer_Find(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), nil, &lexWordState{})
 
 		token, err := l.Find([]string{"Find"})
 		if err != nil {
@@ -332,7 +332,7 @@ func TestLexer_Find(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), nil, &lexWordState{})
 
 		token, err := l.Find([]string{"no match"})
 		if !errors.Is(err, io.EOF) {
@@ -374,7 +374,7 @@ func TestLexer_Ignore(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Ignore!\n")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Ignore!\n")), nil, &lexWordState{})
 
 		advanced, err := l.Advance(7)
 		if err != nil {
@@ -466,7 +466,7 @@ func TestLexer_SkipTo(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), nil, &lexWordState{})
 
 		token, err := l.SkipTo([]string{"Find"})
 		if err != nil {
@@ -512,7 +512,7 @@ func TestLexer_SkipTo(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), &wordState{})
+		l := NewLexer(runeio.NewReader(strings.NewReader("Hello\n!Find!")), nil, &lexWordState{})
 
 		token, err := l.SkipTo([]string{"no match"})
 		if !errors.Is(err, io.EOF) {
@@ -551,8 +551,11 @@ func TestLexer_SkipTo(t *testing.T) {
 func TestLexer_lexemes(t *testing.T) {
 	t.Parallel()
 
-	l := NewLexer(runeio.NewReader(strings.NewReader("Hello Lexemes!")), &wordState{})
-	lexemes := l.Lex(context.Background())
+	lexemes := make(chan *Lexeme, 1024)
+	l := NewLexer(runeio.NewReader(strings.NewReader("Hello Lexemes!")), lexemes, &lexWordState{})
+	if err := l.Lex(context.Background()); err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
 
 	var items []*Lexeme
 	for item := range lexemes {
@@ -574,10 +577,6 @@ func TestLexer_lexemes(t *testing.T) {
 			Line:   1,
 			Column: 7,
 		},
-	}
-	err := l.Err()
-	if err != nil {
-		t.Errorf("unexpected error %v", err)
 	}
 
 	if diff := cmp.Diff(want, got); diff != "" {
