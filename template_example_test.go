@@ -19,7 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/ianlewis/runeio"
 
@@ -27,166 +31,530 @@ import (
 )
 
 const (
-	textType lexparse.LexemeType = iota
-	actionType
+	lexTypeText lexparse.LexemeType = iota
+	lexTypeBlockStart
+	lexTypeBlockEnd
+	lexTypeVarStart
+	lexTypeVarEnd
+	lexTypeIdentifier
 )
 
 const (
-	actionLeft  = "{{"
-	actionRight = "}}"
+	tokenBlockStart = "{%"
+	tokenBlockEnd   = "%}"
+	tokenVarStart   = "{{"
+	tokenVarEnd     = "}}"
+	tokenIf         = "if"
+	tokenElse       = "else"
+	tokenEndif      = "endif"
 )
 
 var (
-	errType           = errors.New("unexpected type")
-	ErrUnclosedAction = errors.New("unclosed action")
+	errType                 = errors.New("unexpected type")
+	errUnexpectedIdentifier = errors.New("unexpected identifier")
+	errUnclosedVar          = errors.New("unclosed variable")
+	errUnclosedBlock        = errors.New("unclosed block")
+	ErrUnclosedAction       = errors.New("unclosed action")
 )
 
 type nodeType int
 
 const (
-	textNodeType nodeType = iota
-	actionNodeType
+	// nodeTypeCode is a node whose children are various text,if,var nodes in order.
+	nodeTypeCode nodeType = iota
+
+	// nodeTypeText is a leaf node comprised of text.
+	nodeTypeText
+
+	// nodeTypeBranch is a binary node whose first child is the 'if' code
+	// node and second is the 'else' code node.
+	nodeTypeBranch
+
+	// nodeTypeVar nodes are variable leaf nodes.
+	nodeTypeVar
 )
 
 type tmplNode struct {
-	typ    nodeType
-	action string
-	text   string
+	typ     nodeType
+	varName string
+	text    string
+}
+
+func tokenErr(err error, t *lexparse.Lexeme) error {
+	return fmt.Errorf("%w: %q: line: %d, column: %d", err, t.Value, t.Line, t.Column)
 }
 
 // lexText tokenizes normal text.
 func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
-	// Search the input for left brackets.
-	token, err := l.Find([]string{actionLeft})
+	for {
+		p, err := l.Peek(2)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("lexing text: %w", err)
+		}
+		switch string(p) {
+		case tokenBlockStart, tokenVarStart:
+			if l.Width() > 0 {
+				l.Emit(lexTypeText)
+			}
+			return lexparse.LexStateFn(lexCode), nil
+		default:
+		}
 
-	// NOTE: Even if we encounter EOF or another error we need to emit the text
-	// up to this point.
-
-	// Emit the text up until this point.
-	if l.Width() > 0 {
-		l.Emit(textType)
+		// Advance the input.
+		if _, err := l.Advance(1); err != nil {
+			if errors.Is(err, io.EOF) {
+				// End of input. Emit the text up to this point.
+				if l.Width() > 0 {
+					l.Emit(lexTypeText)
+				}
+				return nil, nil
+			}
+			return nil, fmt.Errorf("lexing text: %w", err)
+		}
 	}
-
-	// Progress to lexing the action if brackets are found.
-	var nextState lexparse.LexState
-	if token == actionLeft {
-		nextState = lexparse.LexStateFn(lexAction)
-	}
-
-	if err != nil {
-		return nextState, fmt.Errorf("lexing text: %w", err)
-	}
-
-	return nextState, nil
 }
 
-// lexAction tokenizes replacement actions (e.g. {{ var }}).
-func lexAction(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
-	// Discard the left brackets
-	if _, err := l.Discard(len(actionLeft)); err != nil {
-		return nil, fmt.Errorf("lexing action: %w", err)
-	}
-
-	// Find the right brackets.
-	token, err := l.Find([]string{actionRight})
-
-	// Process the token if the right bracket is found.
-	var nextState lexparse.LexState
-	if token == actionRight {
-		// Emit the lexeme.
-		if l.Width() > 0 {
-			l.Emit(actionType)
-		}
-
-		// Discard the right brackets
-		if _, errDiscard := l.Discard(len(actionRight)); errDiscard != nil {
-			return nil, fmt.Errorf("lexing action: %w", errDiscard)
-		}
-		nextState = lexparse.LexStateFn(lexText)
-	}
-
-	if err != nil {
-		// Don't wrap EOF since it's unexpected. Convert to ErrUnclosedAction.
+// lexCode tokenizes template code.
+func lexCode(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+	// Consume whitespace and discard it.
+	// TODO(#94): use backtracking
+	for {
+		rn, err := l.Peek(1)
+		// TODO(#95): update EOF check.
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%w: line %d, column %d", ErrUnclosedAction, l.Line(), l.Column())
+			break
 		}
-		return nextState, fmt.Errorf("lexing action: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("lexing code: %w", err)
+		}
+		if !unicode.IsSpace(rn[0]) {
+			break
+		}
+		if _, err := l.Discard(len(rn)); err != nil {
+			return nil, fmt.Errorf("lexing code: %w", err)
+		}
 	}
 
-	return nextState, nil
+	for {
+		switch l.Token() {
+		case tokenVarStart:
+			l.Emit(lexTypeVarStart)
+			return lexparse.LexStateFn(lexCode), nil
+		case tokenVarEnd:
+			l.Emit(lexTypeVarEnd)
+			return lexparse.LexStateFn(lexText), nil
+		case tokenBlockStart:
+			l.Emit(lexTypeBlockStart)
+			return lexparse.LexStateFn(lexCode), nil
+		case tokenBlockEnd:
+			l.Emit(lexTypeBlockEnd)
+			return lexparse.LexStateFn(lexText), nil
+		default:
+			rn, err := l.Peek(1)
+			// TODO(#95): update EOF check.
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("lexing code: %w", err)
+			}
+			if unicode.IsSpace(rn[0]) {
+				l.Emit(lexTypeIdentifier)
+				return lexparse.LexStateFn(lexCode), nil
+			}
+		}
+
+		if _, err := l.Advance(1); err != nil {
+			return nil, fmt.Errorf("lexing code: %w", err)
+		}
+	}
 }
 
-// parseInit delegates to another parse function based on lexeme type.
-func parseInit(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
-	l := p.Peek()
-	if l == nil {
-		return nil, nil
+// parseRoot updates the root node to be a code block.
+func parseRoot(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseRoot: %#v\n", p.Pos().Value)
+
+	p.Replace(&tmplNode{
+		typ: nodeTypeCode,
+	})
+
+	p.PushState(lexparse.ParseStateFn(parseCode))
+	return nil
+}
+
+// parseCode delegates to another parse function based on lexeme type.
+func parseCode(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseCode: %#v\n", p.Pos().Value)
+
+	token := p.Peek()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return nil
 	}
 
-	switch l.Type {
-	case textType:
-		return lexparse.ParseStateFn(parseText), nil
-	case actionType:
-		return lexparse.ParseStateFn(parseAction), nil
+	// Validate that we are in a code node.
+	if cur := p.Pos(); cur.Value.typ != nodeTypeCode {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	switch token.Type {
+	case lexTypeText:
+		p.PushState(lexparse.ParseStateFn(parseText))
+		return nil
+	case lexTypeVarStart:
+		p.PushState(lexparse.ParseStateFn(parseVarStart))
+		return nil
+	case lexTypeBlockStart:
+		p.PushState(lexparse.ParseStateFn(parseBlockStart))
+		return nil
 	default:
 		// NOTE: This shouldn't happen.
-		return nil, fmt.Errorf("%w: %v", errType, l.Type)
+		return fmt.Errorf("%w: %v", errType, token.Type)
 	}
 }
 
 // parseText handles normal text.
-func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
+func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseText: %#v\n", p.Pos().Value)
+
 	// Get the next lexeme from the parser.
 	l := p.Next()
+	// TODO(#95): Remove nil check.
 	if l == nil {
-		return nil, nil
+		return nil
 	}
+
 	// Emit a text node.
 	p.Node(&tmplNode{
-		typ:  textNodeType,
+		typ:  nodeTypeText,
 		text: l.Value,
 	})
 
-	// Return to the init state.
-	return lexparse.ParseStateFn(parseInit), nil
+	// Return to handling code.
+	p.PushState(lexparse.ParseStateFn(parseCode))
+	return nil
 }
 
-// parseAction handles replacement actions (e.g. {{ var }}).
-func parseAction(_ context.Context, p *lexparse.Parser[*tmplNode]) (lexparse.ParseState[*tmplNode], error) {
-	// Get the next lexeme from the parser.
-	l := p.Next()
-	if l == nil {
-		return nil, nil
+var varNameRegexp = regexp.MustCompile(`[a-zA-Z]+[a-zA-Z0-9]*`)
+
+// parseVarStart handles var start (e.g. '{{').
+func parseVarStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseVarStart: %#v\n", p.Pos().Value)
+
+	token := p.Next()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return tokenErr(errUnclosedVar, token)
 	}
 
-	// Emit an action (variable) node.
+	// Validate the var start token type.
+	if token.Type != lexTypeVarStart {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	p.PushState(
+		lexparse.ParseStateFn(parseVar),
+		lexparse.ParseStateFn(parseVarEnd),
+	)
+
+	return nil
+}
+
+// parseVar handles replacement variables (e.g. the 'var' in {{ var }}).
+func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseVar: %#v\n", p.Pos().Value)
+
+	nameToken := p.Next()
+
+	// Validate the name token's type.
+	if nameToken.Type != lexTypeIdentifier {
+		return tokenErr(errUnexpectedIdentifier, nameToken)
+	}
+
+	// Validate the variable name.
+	if !varNameRegexp.MatchString(nameToken.Value) {
+		return tokenErr(errUnexpectedIdentifier, nameToken)
+	}
+
+	// Add a variable node.
 	_ = p.Node(&tmplNode{
-		typ:    actionNodeType,
-		action: strings.TrimSpace(l.Value),
+		typ:     nodeTypeVar,
+		varName: nameToken.Value,
 	})
 
-	// Return to the init state.
-	return lexparse.ParseStateFn(parseInit), nil
+	return nil
+}
+
+// parseVarEnd handles var end (e.g. '}}').
+func parseVarEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseVarEnd: %#v\n", p.Pos().Value)
+
+	// Validate the end variable.
+	token := p.Next()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return tokenErr(errUnclosedVar, token)
+	}
+
+	// Validate the var end token type.
+	if token.Type != lexTypeVarEnd {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	// Go back to parsing code.
+	p.PushState(lexparse.ParseStateFn(parseCode))
+	return nil
+}
+
+// parseBranch handles the start if conditional block.
+func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseBranch: %#v\n", p.Pos().Value)
+
+	// Validate the if token
+	token := p.Next()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return io.ErrUnexpectedEOF
+	}
+
+	if token.Type != lexTypeIdentifier || token.Value != tokenIf {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	// Add a branch node.
+	_ = p.Push(&tmplNode{
+		typ: nodeTypeBranch,
+	})
+
+	p.PushState(
+		// The first child will be the condition expression.
+		// Currently only a simple variable is supported.
+		lexparse.ParseStateFn(parseVar),
+
+		// Parse the '%}'
+		lexparse.ParseStateFn(parseBlockEnd),
+
+		// Parse the if block.
+		lexparse.ParseStateFn(parseIf),
+
+		// Parse an 'else' (or 'endif')
+		lexparse.ParseStateFn(parseElse),
+	)
+
+	return nil
+}
+
+// parseIf handles the if body.
+func parseIf(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseIf: %#v\n", p.Pos().Value)
+
+	// Add an if body code node.
+	_ = p.Push(&tmplNode{
+		typ: nodeTypeCode,
+	})
+
+	p.PushState(lexparse.ParseStateFn(parseCode))
+	return nil
+}
+
+// parseElse handles either an else block.
+func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseElse: %#v\n", p.Pos().Value)
+
+	// Validate the token
+	token := p.Peek()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return io.ErrUnexpectedEOF
+	}
+
+	if token.Type != lexTypeIdentifier {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	if cur := p.Pos(); cur.Value.typ != nodeTypeCode {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	switch token.Value {
+	case tokenElse:
+		// Consume the token.
+		_ = p.Next()
+
+		// Climb the tree back to the conditional.
+		p.Climb()
+
+		// Validate that we are in a conditional and there isn't already an else branch.
+		if cur := p.Pos(); cur.Value.typ != nodeTypeBranch || len(cur.Children) != 2 {
+			return tokenErr(errUnexpectedIdentifier, token)
+		}
+
+		// Add an else code node to the conditional.
+		_ = p.Push(&tmplNode{
+			typ: nodeTypeCode,
+		})
+
+		p.PushState(
+			// Parse the '%}'
+			lexparse.ParseStateFn(parseBlockEnd),
+
+			// parse the else code block.
+			lexparse.ParseStateFn(parseCode),
+
+			// parse the endif.
+			lexparse.ParseStateFn(parseEndif),
+		)
+	case tokenEndif:
+		p.PushState(lexparse.ParseStateFn(parseEndif))
+	default:
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	return nil
+}
+
+// parseEndif handles either an endif block.
+func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseEndif: %#v\n", p.Pos().Value)
+
+	// Validate the endif token
+	token := p.Next()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return io.ErrUnexpectedEOF
+	}
+
+	if token.Type != lexTypeIdentifier || token.Value != tokenEndif {
+		return tokenErr(errUnexpectedIdentifier, token)
+	}
+
+	// Climb out of the code node.
+	p.Climb()
+
+	// Climb out of the branch node.
+	p.Climb()
+
+	p.PushState(
+		// parse the '%}'
+		lexparse.ParseStateFn(parseBlockEnd),
+
+		// Go back to parsing code.
+		lexparse.ParseStateFn(parseCode),
+	)
+
+	return nil
+}
+
+// parseBlockStart handles the start of a template block '{%'.
+func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	// Validate the block start token
+	next := p.Next()
+	// TODO(#95): Remove nil check.
+	if next == nil {
+		return io.ErrUnexpectedEOF
+	}
+	if next.Type != lexTypeBlockStart {
+		return fmt.Errorf("%w: %v", errUnexpectedIdentifier, next.Value)
+	}
+
+	// Validate the command.
+	token := p.Peek()
+	// TODO(#95): Remove nil check.
+	if token == nil {
+		return fmt.Errorf("%w: %v", errUnclosedBlock, token.Value)
+	}
+	if token.Type != lexTypeIdentifier {
+		return fmt.Errorf("%w: %v", errUnclosedBlock, token.Value)
+	}
+
+	// validate the location is a code block.
+	if cur := p.Pos(); cur.Value.typ != nodeTypeCode {
+		return fmt.Errorf("%w: %v", errUnexpectedIdentifier, token.Value)
+	}
+
+	switch token.Value {
+	case tokenIf:
+		p.PushState(lexparse.ParseStateFn(parseBranch))
+	case tokenElse, tokenEndif:
+		// NOTE: parseElse,parseEndif should already be on the stack.
+	default:
+		return fmt.Errorf("%w: %v", errUnexpectedIdentifier, token.Value)
+	}
+
+	return nil
+}
+
+// parseBlockEnd handles the end of a template block '%}'.
+func parseBlockEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+	fmt.Fprintf(os.Stderr, "parseBlockEnd: %#v\n", p.Pos().Value)
+
+	// Validate the block end token
+	next := p.Next()
+	// TODO(#95): Remove nil check.
+	if next == nil {
+		return io.ErrUnexpectedEOF
+	}
+	if next.Type != lexTypeBlockEnd {
+		return tokenErr(errUnexpectedIdentifier, next)
+	}
+	return nil
 }
 
 // Execute renders the template with the given data.
 func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, error) {
 	var b strings.Builder
-	for _, n := range root.Children {
-		switch n.Value.typ {
-		case textNodeType:
-			// Write raw text to the output.
-			b.WriteString(n.Value.text)
-		case actionNodeType:
-			// Replace templated variables with given data.
-			val, ok := data[n.Value.action]
-			if !ok {
-				val = ""
-			}
-			b.WriteString(val)
-		}
+
+	// Support basic boolean values.
+	if _, ok := data["true"]; !ok {
+		data["true"] = "true"
+	}
+	if _, ok := data["false"]; !ok {
+		data["false"] = "false"
+	}
+
+	if err := execNode(root, data, &b); err != nil {
+		return "", err
 	}
 	return b.String(), nil
+}
+
+func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings.Builder) error {
+	for _, n := range root.Children {
+		switch n.Value.typ {
+		case nodeTypeText:
+			// Write raw text to the output.
+			b.WriteString(n.Value.text)
+		case nodeTypeVar:
+			// Replace templated variables with given data.
+			b.WriteString(data[n.Value.varName])
+		case nodeTypeBranch:
+			if len(n.Children) < 2 {
+				panic(fmt.Sprintf("invalid branch: %#v", n))
+			}
+
+			// Get the condition.
+			cond := n.Children[0]
+			if cond.Value.typ != nodeTypeVar {
+				panic(fmt.Sprintf("invalid branch condition: %#v", cond))
+			}
+
+			v, err := strconv.ParseBool(data[n.Value.varName])
+			if (err == nil && v) || (err != nil && data[n.Value.varName] != "") {
+				if err := execNode(n.Children[0], data, b); err != nil {
+					return err
+				}
+			} else {
+				if err := execNode(n.Children[1], data, b); err != nil {
+					return err
+				}
+			}
+		case nodeTypeCode:
+			if err := execNode(n, data, b); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Example_templateEngine implements a simple text templating language. The
@@ -201,12 +569,12 @@ func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 // including line and column numbers in error messages.
 func Example_templateEngine() {
 	lexemes := make(chan *lexparse.Lexeme, 1024)
-	r := runeio.NewReader(strings.NewReader("Hello, {{ subject }}"))
+	r := runeio.NewReader(strings.NewReader("Hello, {% if subject %}{{ subject }}{% else %}World{% endif %}!"))
 
 	t, err := lexparse.LexParse(
 		context.Background(),
 		lexparse.NewLexer(r, lexemes, lexparse.LexStateFn(lexText)),
-		lexparse.NewParser(lexemes, lexparse.ParseStateFn(parseInit)),
+		lexparse.NewParser(lexemes, lexparse.ParseStateFn(parseRoot)),
 	)
 	if err != nil {
 		panic(err)
@@ -217,5 +585,5 @@ func Example_templateEngine() {
 	}
 	fmt.Print(txt)
 
-	// Output: Hello, 世界
+	// Output: Hello, 世界!
 }
