@@ -66,9 +66,9 @@ func TestLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexemes := make(chan *Lexeme, 1024)
-		lexer := NewLexer(r, lexemes, &lexWordState{})
-		parser := NewParser[string](lexemes, &parseWordState{})
+		tokens := make(chan *Token, 1024)
+		lexer := NewLexer(r, tokens, &lexWordState{})
+		parser := NewParser[string](tokens, &parseWordState{})
 
 		got, err := LexParse(ctx, lexer, parser)
 		if err != nil {
@@ -104,9 +104,9 @@ func TestLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexemes := make(chan *Lexeme, 1024)
-		lexer := NewLexer(r, lexemes, &lexErrState{})
-		parser := NewParser[string](lexemes, &parseErrState{})
+		tokens := make(chan *Token, 1024)
+		lexer := NewLexer(r, tokens, &lexErrState{})
+		parser := NewParser[string](tokens, &parseErrState{})
 
 		_, got := LexParse(ctx, lexer, parser)
 		want := errState
@@ -124,9 +124,9 @@ func TestLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexemes := make(chan *Lexeme, 1024)
-		lexer := NewLexer(r, lexemes, &lexWordState{})
-		parser := NewParser[string](lexemes, &parseErrState{})
+		tokens := make(chan *Token, 1024)
+		lexer := NewLexer(r, tokens, &lexWordState{})
+		parser := NewParser[string](tokens, &parseErrState{})
 
 		_, got := LexParse(ctx, lexer, parser)
 		want := errParse
