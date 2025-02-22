@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 )
 
 // Node is the structure for a single node in the parse tree.
@@ -64,75 +63,62 @@ func ParseStateFn[V comparable](f func(context.Context, *Parser[V]) error) Parse
 	return &parseFnState[V]{f}
 }
 
-type stack[V comparable] struct {
-	sync.Mutex
-	slice []ParseState[V]
-}
+type stack[V comparable] []ParseState[V]
 
 func (s *stack[V]) push(v ParseState[V]) {
-	s.Lock()
-	defer s.Unlock()
-	s.slice = append(s.slice, v)
+	*s = append(*s, v)
 }
 
 func (s *stack[V]) pop() ParseState[V] {
-	s.Lock()
-	defer s.Unlock()
-	if len(s.slice) == 0 {
+	if len(*s) == 0 {
 		return nil
 	}
 
-	v := s.slice[len(s.slice)-1]
-	s.slice = s.slice[:len(s.slice)-1]
+	v := (*s)[len(*s)-1]
+	*s = (*s)[:len(*s)-1]
 	return v
 }
 
-// NewParser creates a new Parser that reads from the lexemes channel. The
+// NewParser creates a new Parser that reads from the tokens channel. The
 // parser is initialized with a root node with an empty value.
-func NewParser[V comparable](lexemes <-chan *Lexeme, startingState ParseState[V]) *Parser[V] {
+func NewParser[V comparable](tokens <-chan *Token, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
 		stateStack: &stack[V]{},
-		lexemes:    lexemes,
+		tokens:     tokens,
 	}
-	p.s.root = root
-	p.s.node = root
+	p.root = root
+	p.node = root
 
 	p.PushState(startingState)
 
 	return p
 }
 
-// Parser reads the lexemes produced by a Lexer and builds a parse tree. It is
+// Parser reads the tokens produced by a Lexer and builds a parse tree. It is
 // implemented as a stack of states ([ParseState]) in which each state implements
 // it's own processing.
 //
 // Parser maintains a current position in the parse tree which can be utilized
 // by parser states.
 type Parser[V comparable] struct {
-	// lexemes is a channel from which the parser will retrieve lexemes from the lexer.
-	lexemes <-chan *Lexeme
+	// tokens is a channel from which the parser will retrieve tokens from the lexer.
+	tokens <-chan *Token
 
 	// stateStack is a stack of expected future states of the parser.
 	stateStack *stack[V]
 
-	// s is the current parser tree state.
-	s struct {
-		// Mutex protects the values in s.
-		sync.Mutex
+	// root is the root node of the parse tree.
+	root *Node[V]
 
-		// root is the root node of the parse tree.
-		root *Node[V]
+	// node is the current node under processing.
+	node *Node[V]
 
-		// node is the current node under processing.
-		node *Node[V]
+	// token is the current token in the stream.
+	token *Token
 
-		// lexeme is the current lexeme in the stream.
-		lexeme *Lexeme
-
-		// next is the next lexeme in the stream.
-		next *Lexeme
-	}
+	// next is the next token in the stream.
+	next *Token
 }
 
 // Parse builds a parse tree by repeatedly pulling [ParseState] objects from
@@ -178,82 +164,61 @@ func (p *Parser[V]) PushState(states ...ParseState[V]) {
 
 // Root returns the root of the parse tree.
 func (p *Parser[V]) Root() *Node[V] {
-	p.s.Lock()
-	defer p.s.Unlock()
-	return p.s.root
+	return p.root
 }
 
-// Peek returns the next Lexeme from the lexer without consuming it.
-func (p *Parser[V]) Peek() *Lexeme {
-	p.s.Lock()
-	defer p.s.Unlock()
-	return p.peek()
-}
-
-func (p *Parser[V]) peek() *Lexeme {
-	if p.s.next != nil {
-		return p.s.next
+// Peek returns the next token from the lexer without consuming it.
+func (p *Parser[V]) Peek() *Token {
+	if p.next != nil {
+		return p.next
 	}
-	l, ok := <-p.lexemes
+	l, ok := <-p.tokens
 	if !ok {
 		return nil
 	}
-	p.s.next = l
-	return p.s.next
+	p.next = l
+	return p.next
 }
 
-// Next returns the next Lexeme from the lexer. This is the new current lexeme
+// Next returns the next token from the lexer. This is the new current token
 // position.
-func (p *Parser[V]) Next() *Lexeme {
-	p.s.Lock()
-	defer p.s.Unlock()
-
-	l := p.peek()
-	p.s.next = nil
-	p.s.lexeme = l
-	return p.s.lexeme
+func (p *Parser[V]) Next() *Token {
+	l := p.Peek()
+	p.next = nil
+	p.token = l
+	return p.token
 }
 
 // Pos returns the current node position in the tree. May return nil if a root
 // node has not been created.
 func (p *Parser[V]) Pos() *Node[V] {
-	p.s.Lock()
-	defer p.s.Unlock()
-	return p.s.node
+	return p.node
 }
 
 // Push creates a new node, adds it as a child to the current node, updates
 // the current node to the new node, and returns the new node.
 func (p *Parser[V]) Push(v V) *Node[V] {
-	p.s.Lock()
-	defer p.s.Unlock()
-	p.s.node = p.node(v)
-	return p.s.node
+	p.node = p.Node(v)
+	return p.node
 }
 
-// Node creates a new node at the current lexeme position and adds it as a
+// Node creates a new node at the current token position and adds it as a
 // child to the current node. The current node is not updated.
 func (p *Parser[V]) Node(v V) *Node[V] {
-	p.s.Lock()
-	defer p.s.Unlock()
-	return p.node(v)
-}
-
-func (p *Parser[V]) node(v V) *Node[V] {
 	n := p.newNode(v)
-	p.s.node.Children = append(p.s.node.Children, n)
-	n.Parent = p.s.node
+	p.node.Children = append(p.node.Children, n)
+	n.Parent = p.node
 	return n
 }
 
-// newNode creates a new node at the current lexeme position and returns it
+// newNode creates a new node at the current token position and returns it
 // without adding it to the tree.
 func (p *Parser[V]) newNode(v V) *Node[V] {
 	var pos, line, col int
-	if p.s.lexeme != nil {
-		pos = p.s.lexeme.Pos
-		line = p.s.lexeme.Line
-		col = p.s.lexeme.Column
+	if p.token != nil {
+		pos = p.token.Pos
+		line = p.token.Line
+		col = p.token.Column
 	}
 
 	return &Node[V]{
@@ -268,12 +233,9 @@ func (p *Parser[V]) newNode(v V) *Node[V] {
 // returning the previous current node. It is a no-op that returns the root
 // node if called on the root node.
 func (p *Parser[V]) Climb() *Node[V] {
-	p.s.Lock()
-	defer p.s.Unlock()
-
-	n := p.s.node
-	if p.s.node.Parent != nil {
-		p.s.node = p.s.node.Parent
+	n := p.node
+	if p.node.Parent != nil {
+		p.node = p.node.Parent
 	}
 	return n
 }
@@ -282,16 +244,13 @@ func (p *Parser[V]) Climb() *Node[V] {
 // old node is removed from the tree and it's value is returned. Can be used to
 // replace the root node.
 func (p *Parser[V]) Replace(v V) V {
-	p.s.Lock()
-	defer p.s.Unlock()
-
 	n := p.newNode(v)
 
 	// Replace the parent.
-	n.Parent = p.s.node.Parent
+	n.Parent = p.node.Parent
 	if n.Parent != nil {
 		for i := range n.Parent.Children {
-			if n.Parent.Children[i] == p.s.node {
+			if n.Parent.Children[i] == p.node {
 				n.Parent.Children[i] = n
 				break
 			}
@@ -299,21 +258,21 @@ func (p *Parser[V]) Replace(v V) V {
 	}
 
 	// Replace children. Preserve nil,non-nil slice.
-	if p.s.node.Children != nil {
-		n.Children = make([]*Node[V], len(p.s.node.Children))
-		for i := range p.s.node.Children {
-			n.Children[i] = p.s.node.Children[i]
+	if p.node.Children != nil {
+		n.Children = make([]*Node[V], len(p.node.Children))
+		for i := range p.node.Children {
+			n.Children[i] = p.node.Children[i]
 			n.Children[i].Parent = n
 		}
 	}
 
 	// If we are currently at the root, replace the root reference as well.
-	if p.s.node == p.s.root {
-		p.s.root = n
+	if p.node == p.root {
+		p.root = n
 	}
 
-	oldVal := p.s.node.Value
-	p.s.node = n
+	oldVal := p.node.Value
+	p.node = n
 
 	return oldVal
 }

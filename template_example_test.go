@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	lexTypeText lexparse.LexemeType = iota
+	lexTypeText lexparse.TokenType = iota
 	lexTypeBlockStart
 	lexTypeBlockEnd
 	lexTypeVarStart
@@ -80,7 +80,7 @@ type tmplNode struct {
 	text    string
 }
 
-func tokenErr(err error, t *lexparse.Lexeme) error {
+func tokenErr(err error, t *lexparse.Token) error {
 	return fmt.Errorf("%w: %q: line: %d, column: %d", err, t.Value, t.Line, t.Column)
 }
 
@@ -182,7 +182,7 @@ func parseRoot(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	return nil
 }
 
-// parseCode delegates to another parse function based on lexeme type.
+// parseCode delegates to another parse function based on token type.
 func parseCode(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	fmt.Fprintf(os.Stderr, "parseCode: %#v\n", p.Pos().Value)
 
@@ -217,7 +217,7 @@ func parseCode(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	fmt.Fprintf(os.Stderr, "parseText: %#v\n", p.Pos().Value)
 
-	// Get the next lexeme from the parser.
+	// Get the next token from the parser.
 	l := p.Next()
 	// TODO(#95): Remove nil check.
 	if l == nil {
@@ -568,13 +568,13 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings
 // This example includes some best practices for error handling, such as
 // including line and column numbers in error messages.
 func Example_templateEngine() {
-	lexemes := make(chan *lexparse.Lexeme, 1024)
+	tokens := make(chan *lexparse.Token, 1024)
 	r := runeio.NewReader(strings.NewReader("Hello, {% if subject %}{{ subject }}{% else %}World{% endif %}!"))
 
 	t, err := lexparse.LexParse(
 		context.Background(),
-		lexparse.NewLexer(r, lexemes, lexparse.LexStateFn(lexText)),
-		lexparse.NewParser(lexemes, lexparse.ParseStateFn(parseRoot)),
+		lexparse.NewLexer(r, tokens, lexparse.LexStateFn(lexText)),
+		lexparse.NewParser(tokens, lexparse.ParseStateFn(parseRoot)),
 	)
 	if err != nil {
 		panic(err)

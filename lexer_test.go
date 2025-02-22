@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	unusedType LexemeType = iota
+	unusedType TokenType = iota
 	wordType
 )
 
@@ -91,15 +91,15 @@ func TestLexer_Peek(t *testing.T) {
 		t.Errorf("Column: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.s.startPos, 0; got != want {
+	if got, want := l.startPos, 0; got != want {
 		t.Errorf("startPos: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.s.startLine, 0; got != want {
+	if got, want := l.startLine, 0; got != want {
 		t.Errorf("startLine: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.s.startColumn, 0; got != want {
+	if got, want := l.startColumn, 0; got != want {
 		t.Errorf("startColumn: want: %v, got: %v", want, got)
 	}
 }
@@ -548,21 +548,21 @@ func TestLexer_SkipTo(t *testing.T) {
 	})
 }
 
-func TestLexer_lexemes(t *testing.T) {
+func TestLexer_tokens(t *testing.T) {
 	t.Parallel()
 
-	lexemes := make(chan *Lexeme, 1024)
-	l := NewLexer(runeio.NewReader(strings.NewReader("Hello Lexemes!")), lexemes, &lexWordState{})
+	tokens := make(chan *Token, 1024)
+	l := NewLexer(runeio.NewReader(strings.NewReader("Hello tokens!")), tokens, &lexWordState{})
 	if err := l.Lex(context.Background()); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 
-	var items []*Lexeme
-	for item := range lexemes {
+	var items []*Token
+	for item := range tokens {
 		items = append(items, item)
 	}
 	got := items
-	want := []*Lexeme{
+	want := []*Token{
 		{
 			Type:   wordType,
 			Value:  "Hello",
@@ -572,7 +572,7 @@ func TestLexer_lexemes(t *testing.T) {
 		},
 		{
 			Type:   wordType,
-			Value:  "Lexemes!",
+			Value:  "tokens!",
 			Pos:    6,
 			Line:   1,
 			Column: 7,
