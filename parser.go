@@ -174,7 +174,7 @@ func (p *Parser[V]) Peek() *Token {
 	}
 	l, ok := <-p.tokens
 	if !ok {
-		return nil
+		return &TokenEOF
 	}
 	p.next = l
 	return p.next
