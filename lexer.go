@@ -45,6 +45,9 @@ type BufferedRuneReader interface {
 	Discard(n int) (int, error)
 }
 
+// EOF is a rune that indicates that the lexer has finished processing.
+var EOF rune = -1
+
 // TokenType is a user-defined Token type.
 type TokenType int
 
@@ -92,6 +95,14 @@ type Token struct {
 	Column int
 }
 
+// TokenTypeEOF indicates an EOF token signalling the end of input.
+var TokenTypeEOF TokenType = -1
+
+// TokenEOF signals the end of input.
+var TokenEOF = Token{
+	Type: TokenTypeEOF,
+}
+
 // Lexer lexically processes a byte stream. It is implemented as a finite-state
 // machine in which each [LexState] implements it's own processing.
 //
@@ -128,6 +139,9 @@ type Lexer struct {
 
 	// startColumn is the column of the current token.
 	startColumn int
+
+	// err is the first error the lexer encountered.
+	err error
 }
 
 // NewLexer creates a new Lexer initialized with the given starting [LexState].
@@ -174,17 +188,17 @@ func (l *Lexer) Column() int {
 	return l.column + 1
 }
 
-// ReadRune returns the next rune of input, advancing the reader while not
+// Next returns the next rune of input, advancing the reader while not
 // advancing the cursor.
-func (l *Lexer) ReadRune() (rune, int, error) {
-	return l.readrune()
-}
+func (l *Lexer) Next() rune {
+	if l.err != nil {
+		return EOF
+	}
 
-func (l *Lexer) readrune() (rune, int, error) {
-	rn, n, err := l.r.ReadRune()
+	rn, _, err := l.r.ReadRune()
 	if err != nil {
-		//nolint:wrapcheck // Error should not be wrapped as it could be io.EOF
-		return 0, 0, err
+		l.setErr(l.err)
+		return EOF
 	}
 
 	l.pos++
@@ -195,36 +209,65 @@ func (l *Lexer) readrune() (rune, int, error) {
 	}
 
 	_, _ = l.b.WriteRune(rn)
-	return rn, n, nil
+	return rn
 }
 
-// Peek returns the next n runes from the buffer without advancing the
+// Peek returns the next rune from the buffer without advancing the
+// lexer or underlying reader. The rune stop being valid at the next read
+// call.
+func (l *Lexer) Peek() rune {
+	p := l.PeekN(1)
+	if len(p) < 1 {
+		return EOF
+	}
+	return p[0]
+}
+
+// PeekN returns the next n runes from the buffer without advancing the
 // lexer or underlying reader. The runes stop being valid at the next read
-// call. If Peek returns fewer than n runes, it also returns an error
-// indicating why the read is short.
-func (l *Lexer) Peek(n int) ([]rune, error) {
+// call. PeekN may return fewer runes than requested.
+func (l *Lexer) PeekN(n int) []rune {
+	if l.err != nil {
+		return []rune{EOF}
+	}
+
 	p, err := l.r.Peek(n)
-	//nolint:wrapcheck // Error may return io.EOF.
-	return p, err
+	l.setErr(err)
+	if len(p) == 0 {
+		return []rune{EOF}
+	}
+	return p
 }
 
-// Advance attempts to advance the underlying reader n runes and returns the
-// number actually advanced. If the number of runes advanced is different than
-// n, then an error is returned explaining the reason. It also updates the
-// current token position.
-func (l *Lexer) Advance(n int) (int, error) {
+// Advance attempts to advance the underlying reader n runes and returns true
+// if actually advanced. The current token cursor position is not updated.
+func (l *Lexer) Advance() bool {
+	return l.advance(1, false) == 1
+}
+
+// AdvanceN attempts to advance the underlying reader n runes and returns the
+// number actually advanced. The current token cursor position is not updated.
+func (l *Lexer) AdvanceN(n int) int {
 	return l.advance(n, false)
 }
 
-// Discard attempts to discard n runes and returns the number actually
-// discarded. If the number of runes discarded is different than n, then an
-// error is returned explaining the reason. It also advances the current token
-// cursor position.
-func (l *Lexer) Discard(n int) (int, error) {
+// Discard attempts to discard the next rune and returns true if actually
+// discarded.
+func (l *Lexer) Discard() bool {
+	return l.DiscardN(1) == 1
+}
+
+// DiscardN attempts to discard n runes, advancing the current token cursor
+// position, and returns the number actually discarded.
+func (l *Lexer) DiscardN(n int) int {
 	return l.advance(n, true)
 }
 
-func (l *Lexer) advance(n int, discard bool) (int, error) {
+func (l *Lexer) advance(n int, discard bool) int {
+	if l.err != nil {
+		return 0
+	}
+
 	var advanced int
 	if discard {
 		defer l.Ignore()
@@ -249,7 +292,8 @@ func (l *Lexer) advance(n int, discard bool) (int, error) {
 		// Peek at input so we can increment position, line, column counters.
 		rn, err := l.r.Peek(toRead)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return advanced, fmt.Errorf("peeking input: %w", err)
+			l.setErr(fmt.Errorf("peeking input: %w", err))
+			return advanced
 		}
 
 		// Advance by peeked amount.
@@ -273,24 +317,26 @@ func (l *Lexer) advance(n int, discard bool) (int, error) {
 		}
 
 		if dErr != nil {
-			return advanced, fmt.Errorf("discarding input: %w", err)
+			l.setErr(fmt.Errorf("discarding input: %w", err))
+			return advanced
 		}
 		if err != nil {
 			// EOF from Peek
-			//nolint:wrapcheck // Error doesn't need to be wrapped.
-			return advanced, err
+			l.setErr(err)
+			return advanced
 		}
 
 		n -= d
 	}
 
-	return advanced, nil
+	return advanced
 }
 
 // Find searches the input for one of the given tokens, advancing the reader,
 // and stopping when one of the tokens is found. The token cursor is not
-// advanced. The token found is returned.
-func (l *Lexer) Find(tokens []string) (string, error) {
+// advanced. The token found is returned. If no match is found an empty string
+// is returned.
+func (l *Lexer) Find(tokens []string) string {
 	var maxLen int
 	for i := range tokens {
 		if len(tokens[i]) > maxLen {
@@ -298,32 +344,41 @@ func (l *Lexer) Find(tokens []string) (string, error) {
 		}
 	}
 
+	if maxLen == 0 {
+		return ""
+	}
+
+	// TODO(#94): use backtracking
 	for {
-		rns, err := l.r.Peek(maxLen)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return "", fmt.Errorf("peeking input: %w", err)
-		}
-		for j := range tokens {
-			if strings.HasPrefix(string(rns), tokens[j]) {
-				return tokens[j], nil
+		switch rns := l.PeekN(maxLen); rns[0] {
+		case EOF:
+			return ""
+		default:
+			for j := range tokens {
+				if strings.HasPrefix(string(rns), tokens[j]) {
+					return tokens[j]
+				}
 			}
 		}
 
-		if _, _, err = l.readrune(); err != nil {
-			return "", err
-		}
+		_ = l.Next()
 	}
 }
 
-// SkipTo searches the input for one of the given tokens, advancing the reader,
-// and stopping when one of the tokens is found. The token cursor is advanced
-// and data prior to the token is discarded. The token found is returned.
-func (l *Lexer) SkipTo(tokens []string) (string, error) {
+// DiscardTo searches the input for one of the given tokens, advancing the
+// reader, and stopping when one of the tokens is found. The token cursor is
+// advanced and data prior to the token is discarded. The token found is
+// returned. If no match is found an empty string is returned.
+func (l *Lexer) DiscardTo(tokens []string) string {
 	var maxLen int
 	for i := range tokens {
 		if len(tokens[i]) > maxLen {
 			maxLen = len(tokens[i])
 		}
+	}
+
+	if maxLen == 0 {
+		return ""
 	}
 
 	for {
@@ -332,19 +387,16 @@ func (l *Lexer) SkipTo(tokens []string) (string, error) {
 			bufS = maxLen
 		}
 
-		rns, err := l.r.Peek(bufS)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return "", fmt.Errorf("peeking input: %w", err)
-		}
-
+		// TODO(#94): use backtracking
+		rns := l.PeekN(bufS)
 		for i := 0; i < len(rns)-maxLen+1; i++ {
 			for j := range tokens {
 				if strings.HasPrefix(string(rns[i:i+maxLen]), tokens[j]) {
 					// We have found a match. Discard prior runes and return.
-					if _, advErr := l.advance(i, true); advErr != nil {
-						return "", advErr
+					if n := l.advance(i, true); n <= 0 {
+						return ""
 					}
-					return tokens[j], nil
+					return tokens[j]
 				}
 			}
 		}
@@ -356,8 +408,8 @@ func (l *Lexer) SkipTo(tokens []string) (string, error) {
 		if toDiscard <= 0 {
 			toDiscard = 1
 		}
-		if _, err = l.advance(toDiscard, true); err != nil {
-			return "", err
+		if n := l.advance(toDiscard, true); n <= 0 {
+			return ""
 		}
 	}
 }
@@ -382,7 +434,10 @@ func (l *Lexer) Ignore() {
 // The caller can request that the lexer stop by cancelling ctx.
 func (l *Lexer) Lex(ctx context.Context) error {
 	// Set the channel to support calls back into the Lexer.
-	defer close(l.tokens)
+	defer func() {
+		l.tokens <- &TokenEOF
+		close(l.tokens)
+	}()
 
 	for l.state != nil {
 		select {
@@ -408,7 +463,7 @@ func (l *Lexer) Lex(ctx context.Context) error {
 		return fmt.Errorf("lexing: %w", err)
 	}
 
-	return nil
+	return l.Err()
 }
 
 // Emit emits the token between the the current cursor position and reader
@@ -431,4 +486,15 @@ func (l *Lexer) Emit(typ TokenType) *Token {
 	l.Ignore()
 
 	return token
+}
+
+// Err returns any errors that the lexer encountered.
+func (l *Lexer) Err() error {
+	return l.err
+}
+
+func (l *Lexer) setErr(err error) {
+	if l.err == nil && !errors.Is(err, io.EOF) {
+		l.err = err
+	}
 }
