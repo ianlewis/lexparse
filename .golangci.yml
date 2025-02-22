@@ -47,7 +47,6 @@ linters:
     - errcheck
     - errorlint
     - exhaustive
-    - exportloopref
     - gci
     - gochecknoinits
     - gocognit
