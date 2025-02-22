@@ -28,13 +28,16 @@ import (
 type parseWordState struct{}
 
 func (w *parseWordState) Run(_ context.Context, p *Parser[string]) error {
-	l := p.Next()
-	if l == nil {
+	switch token := p.Next(); token.Type {
+	case wordType:
+		p.Node(token.Value)
+		p.PushState(w)
 		return nil
+	case TokenTypeEOF:
+		return nil
+	default:
+		panic("unknown type")
 	}
-	p.Node(l.Value)
-	p.PushState(w)
-	return nil
 }
 
 var (

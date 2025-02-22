@@ -17,7 +17,6 @@ package lexparse
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -136,7 +135,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 		select {
 		case <-ctx.Done():
 			if err := ctx.Err(); err != nil {
-				return p.Root(), fmt.Errorf("parsing: %w", err)
+				return p.Root(), err
 			}
 			return p.Root(), nil
 		default:
@@ -148,7 +147,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 				break
 			}
 
-			return p.Root(), fmt.Errorf("parsing: %w", err)
+			return p.Root(), err
 		}
 	}
 	return p.Root(), nil
@@ -174,7 +173,7 @@ func (p *Parser[V]) Peek() *Token {
 	}
 	l, ok := <-p.tokens
 	if !ok {
-		return nil
+		return &tokenEOF
 	}
 	p.next = l
 	return p.next

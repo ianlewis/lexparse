@@ -64,8 +64,13 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 	p := NewParser[string](tokens, ParseStateFn(func(_ context.Context, p *Parser[string]) error {
 		for {
 			token := p.Next()
-			if token == nil {
-				break
+			switch token.Type {
+			case wordType:
+				// OK
+			case TokenTypeEOF:
+				return nil
+			default:
+				panic("unknown type")
 			}
 
 			switch token.Value {
@@ -80,7 +85,6 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 				p.Node(token.Value)
 			}
 		}
-		return nil
 	}))
 
 	root, err := p.Parse(context.Background())
@@ -207,7 +211,7 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// expected end of tokens
 	niltoken := p.Next()
-	if diff := cmp.Diff((*Token)(nil), niltoken); diff != "" {
+	if diff := cmp.Diff(&tokenEOF, niltoken); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 }
