@@ -27,13 +27,14 @@ import (
 
 type parseWordState struct{}
 
-func (w *parseWordState) Run(_ context.Context, p *Parser[string]) (ParseState[string], error) {
+func (w *parseWordState) Run(_ context.Context, p *Parser[string]) error {
 	l := p.Next()
 	if l == nil {
-		return nil, nil
+		return nil
 	}
 	p.Node(l.Value)
-	return w, nil
+	p.PushState(w)
+	return nil
 }
 
 var (
@@ -49,9 +50,9 @@ func (e *lexErrState) Run(context.Context, *Lexer) (LexState, error) {
 
 type parseErrState struct{}
 
-func (e *parseErrState) Run(_ context.Context, p *Parser[string]) (ParseState[string], error) {
+func (e *parseErrState) Run(_ context.Context, p *Parser[string]) error {
 	_ = p.Next()
-	return nil, errParse
+	return errParse
 }
 
 func TestLexParse(t *testing.T) {

@@ -44,24 +44,47 @@ type ParseState[V comparable] interface {
 	// Run returns the next state to transition to or an error. If the returned
 	// next state is nil or the returned error is io.EOF then the Lexer
 	// finishes processing normally.
-	Run(context.Context, *Parser[V]) (ParseState[V], error)
+	Run(context.Context, *Parser[V]) error
 }
 
 type parseFnState[V comparable] struct {
-	f func(context.Context, *Parser[V]) (ParseState[V], error)
+	f func(context.Context, *Parser[V]) error
 }
 
 // Run implements ParseState.Run.
-func (s *parseFnState[V]) Run(ctx context.Context, p *Parser[V]) (ParseState[V], error) {
+func (s *parseFnState[V]) Run(ctx context.Context, p *Parser[V]) error {
 	if s.f == nil {
-		return nil, nil
+		return nil
 	}
 	return s.f(ctx, p)
 }
 
 // ParseStateFn creates a State from the given Run function.
-func ParseStateFn[V comparable](f func(context.Context, *Parser[V]) (ParseState[V], error)) ParseState[V] {
+func ParseStateFn[V comparable](f func(context.Context, *Parser[V]) error) ParseState[V] {
 	return &parseFnState[V]{f}
+}
+
+type stack[V comparable] struct {
+	sync.Mutex
+	slice []ParseState[V]
+}
+
+func (s *stack[V]) push(v ParseState[V]) {
+	s.Lock()
+	defer s.Unlock()
+	s.slice = append(s.slice, v)
+}
+
+func (s *stack[V]) pop() ParseState[V] {
+	s.Lock()
+	defer s.Unlock()
+	if len(s.slice) == 0 {
+		return nil
+	}
+
+	v := s.slice[len(s.slice)-1]
+	s.slice = s.slice[:len(s.slice)-1]
+	return v
 }
 
 // NewParser creates a new Parser that reads from the lexemes channel. The
@@ -69,16 +92,19 @@ func ParseStateFn[V comparable](f func(context.Context, *Parser[V]) (ParseState[
 func NewParser[V comparable](lexemes <-chan *Lexeme, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
-		state:   startingState,
-		lexemes: lexemes,
+		stateStack: &stack[V]{},
+		lexemes:    lexemes,
 	}
 	p.s.root = root
 	p.s.node = root
+
+	p.PushState(startingState)
+
 	return p
 }
 
 // Parser reads the lexemes produced by a Lexer and builds a parse tree. It is
-// implemented as a finite-state machine in which each [ParseState] implements
+// implemented as a stack of states ([ParseState]) in which each state implements
 // it's own processing.
 //
 // Parser maintains a current position in the parse tree which can be utilized
@@ -87,8 +113,8 @@ type Parser[V comparable] struct {
 	// lexemes is a channel from which the parser will retrieve lexemes from the lexer.
 	lexemes <-chan *Lexeme
 
-	// state is the current state of the Parser.
-	state ParseState[V]
+	// stateStack is a stack of expected future states of the parser.
+	stateStack *stack[V]
 
 	// s is the current parser tree state.
 	s struct {
@@ -109,12 +135,18 @@ type Parser[V comparable] struct {
 	}
 }
 
-// Parse builds a parse tree by repeatedly calling [ParseState] starting with
-// the initial state. Parsing can be cancelled by ctx.
+// Parse builds a parse tree by repeatedly pulling [ParseState] objects from
+// the stack and running them, starting with the initial state. Parsing can be
+// cancelled by ctx.
 //
 // The caller can request that the parser stop by cancelling ctx.
 func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
-	for p.state != nil {
+	for {
+		state := p.stateStack.pop()
+		if state == nil {
+			break
+		}
+
 		select {
 		case <-ctx.Done():
 			if err := ctx.Err(); err != nil {
@@ -125,8 +157,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 		}
 
 		var err error
-		p.state, err = p.state.Run(ctx, p)
-		if err != nil {
+		if err = state.Run(ctx, p); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
@@ -135,6 +166,14 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 		}
 	}
 	return p.Root(), nil
+}
+
+// PushState pushes a number of new expected future states onto the state stack
+// in reverse order.
+func (p *Parser[V]) PushState(states ...ParseState[V]) {
+	for i := len(states) - 1; i >= 0; i-- {
+		p.stateStack.push(states[i])
+	}
 }
 
 // Root returns the root of the parse tree.

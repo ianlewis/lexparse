@@ -61,7 +61,7 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 
 	lexemes := testLexer(t, input)
 
-	p := NewParser[string](lexemes, ParseStateFn(func(_ context.Context, p *Parser[string]) (ParseState[string], error) {
+	p := NewParser[string](lexemes, ParseStateFn(func(_ context.Context, p *Parser[string]) error {
 		for {
 			lexeme := p.Next()
 			if lexeme == nil {
@@ -80,7 +80,7 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 				p.Node(lexeme.Value)
 			}
 		}
-		return nil, nil
+		return nil
 	}))
 
 	root, err := p.Parse(context.Background())
