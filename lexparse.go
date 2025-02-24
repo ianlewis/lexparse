@@ -34,11 +34,13 @@ func LexParse[V comparable](
 	var parseErr error
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	wg.Add(1)
 	go func() {
 		lexErr = l.Lex(ctx)
+		if lexErr != nil {
+			cancel()
+		}
 		wg.Done()
 	}()
 
