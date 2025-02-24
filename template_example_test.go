@@ -50,7 +50,6 @@ const (
 )
 
 var (
-	errType                 = errors.New("unexpected type")
 	errUnexpectedRune       = errors.New("unexpected rune")
 	errUnexpectedIdentifier = errors.New("unexpected identifier")
 )
@@ -64,14 +63,14 @@ var (
 type nodeType int
 
 const (
-	// nodeTypeCode is a node whose children are various text,if,var nodes in order.
-	nodeTypeCode nodeType = iota
+	// nodeTypeSeq is a node whose children are various text,if,var nodes in order.
+	nodeTypeSeq nodeType = iota
 
 	// nodeTypeText is a leaf node comprised of text.
 	nodeTypeText
 
-	// nodeTypeBranch is a binary node whose first child is the 'if' code
-	// node and second is the 'else' code node.
+	// nodeTypeBranch is a binary node whose first child is the 'if' sequence
+	// node and second is the 'else' sequence node.
 	nodeTypeBranch
 
 	// nodeTypeVar nodes are variable leaf nodes.
@@ -79,7 +78,9 @@ const (
 )
 
 type tmplNode struct {
-	typ     nodeType
+	typ nodeType
+
+	// Fields below are populated based on node type.
 	varName string
 	text    string
 }
@@ -151,7 +152,7 @@ func lexIden(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	}
 }
 
-// lexSymbol tokenizes template code symbols (e.g. {%, {{, }}, %}).
+// lexSymbol tokenizes template symbols (e.g. {%, {{, }}, %}).
 func lexSymbol(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	for {
 		switch l.Token() {
@@ -179,83 +180,59 @@ func lexSymbol(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) 
 	}
 }
 
-// parseRoot updates the root node to be a code block.
+// parseRoot updates the root node to be a sequence block.
 func parseRoot(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	p.Replace(&tmplNode{
-		typ: nodeTypeCode,
+		typ: nodeTypeSeq,
 	})
 
-	p.PushState(lexparse.ParseStateFn(parseCode))
+	p.PushState(lexparse.ParseStateFn(parseSeq))
 	return nil
 }
 
-// parseCode delegates to another parse function based on token type.
-func parseCode(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+// parseSeq delegates to another parse function based on token type.
+func parseSeq(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	token := p.Peek()
-
-	// Validate that we are in a code node.
-	if cur := p.Pos(); cur.Value.typ != nodeTypeCode {
-		// NOTE: This shouldn't happen.
-		panic(fmt.Errorf("internal error: %w", tokenErr(errUnexpectedIdentifier, token)))
-	}
 
 	switch token.Type {
 	case lexTypeText:
 		p.PushState(lexparse.ParseStateFn(parseText))
-		return nil
 	case lexTypeVarStart:
 		p.PushState(lexparse.ParseStateFn(parseVarStart))
-		return nil
 	case lexTypeBlockStart:
 		p.PushState(lexparse.ParseStateFn(parseBlockStart))
-		return nil
-	case lexparse.TokenTypeEOF:
-		return nil
-	default:
-		// NOTE: This shouldn't happen.
-		panic(tokenErr(fmt.Errorf("internal error: %w: %v", errType, token.Type), token))
 	}
+
+	return nil
 }
 
 // parseText handles normal text.
 func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
-	case lexTypeText:
-		// Emit a text node.
-		p.Node(&tmplNode{
-			typ:  nodeTypeText,
-			text: token.Value,
-		})
+	token := p.Next()
 
-		// Return to handling code.
-		p.PushState(lexparse.ParseStateFn(parseCode))
+	// Emit a text node.
+	p.Node(&tmplNode{
+		typ:  nodeTypeText,
+		text: token.Value,
+	})
 
-		return nil
-	case lexparse.TokenTypeEOF:
-		// NOTE: This shouldn't happen.
-		panic(fmt.Errorf("%w: expected text", io.ErrUnexpectedEOF))
-	default:
-		// NOTE: This shouldn't happen.
-		panic(tokenErr(fmt.Errorf("internal error: %w: %v", errType, token.Type), token))
-	}
+	// Return to handling a sequence.
+	p.PushState(lexparse.ParseStateFn(parseSeq))
+
+	return nil
 }
 
 // parseVarStart handles var start (e.g. '{{').
 func parseVarStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
-	case lexTypeVarStart:
-		p.PushState(
-			lexparse.ParseStateFn(parseVar),
-			lexparse.ParseStateFn(parseVarEnd),
-		)
-		return nil
-	case lexparse.TokenTypeEOF:
-		// NOTE: This shouldn't happen.
-		panic(fmt.Errorf("%w: parsing variable, expected %q", io.ErrUnexpectedEOF, tokenVarStart))
-	default:
-		// NOTE: This shouldn't happen.
-		panic(tokenErr(fmt.Errorf("internal error: %w: %v", errType, token.Type), token))
-	}
+	// Consume the var start token.
+	_ = p.Next()
+
+	p.PushState(
+		lexparse.ParseStateFn(parseVar),
+		lexparse.ParseStateFn(parseVarEnd),
+	)
+
+	return nil
 }
 
 // parseVar handles replacement variables (e.g. the 'var' in {{ var }}).
@@ -285,13 +262,13 @@ func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 func parseVarEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	switch token := p.Next(); token.Type {
 	case lexTypeVarEnd:
-		// Go back to parsing code.
-		p.PushState(lexparse.ParseStateFn(parseCode))
+		// Go back to parsing template init state.
+		p.PushState(lexparse.ParseStateFn(parseSeq))
 		return nil
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: unclosed variable, expected %q", io.ErrUnexpectedEOF, tokenVarEnd)
 	default:
-		return fmt.Errorf("%w: expected %q", errUnexpectedIdentifier, tokenVarEnd)
+		return fmt.Errorf("%w: expected %q", tokenErr(errUnexpectedIdentifier, token), tokenVarEnd)
 	}
 }
 
@@ -333,12 +310,12 @@ func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 
 // parseIf handles the if body.
 func parseIf(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	// Add an if body code node.
+	// Add an if body sequence node.
 	_ = p.Push(&tmplNode{
-		typ: nodeTypeCode,
+		typ: nodeTypeSeq,
 	})
 
-	p.PushState(lexparse.ParseStateFn(parseCode))
+	p.PushState(lexparse.ParseStateFn(parseSeq))
 	return nil
 }
 
@@ -348,8 +325,8 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 
 	switch token.Type {
 	case lexTypeIdentifier:
-		// Validate we are at a code node.
-		if cur := p.Pos(); cur.Value.typ != nodeTypeCode {
+		// Validate we are at a sequence node.
+		if cur := p.Pos(); cur.Value.typ != nodeTypeSeq {
 			return tokenErr(errUnexpectedIdentifier, token)
 		}
 	case lexparse.TokenTypeEOF:
@@ -371,17 +348,17 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 			return tokenErr(errUnexpectedIdentifier, token)
 		}
 
-		// Add an else code node to the conditional.
+		// Add an else sequence node to the conditional.
 		_ = p.Push(&tmplNode{
-			typ: nodeTypeCode,
+			typ: nodeTypeSeq,
 		})
 
 		p.PushState(
 			// Parse the '%}'
 			lexparse.ParseStateFn(parseBlockEnd),
 
-			// parse the else code block.
-			lexparse.ParseStateFn(parseCode),
+			// parse the else sequence block.
+			lexparse.ParseStateFn(parseSeq),
 
 			// parse the endif.
 			lexparse.ParseStateFn(parseEndif),
@@ -403,7 +380,7 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 			return tokenErr(fmt.Errorf("%w: looking for %q", errUnexpectedIdentifier, tokenEndif), token)
 		}
 
-		// Climb out of the code node.
+		// Climb out of the sequence node.
 		p.Climb()
 
 		// Climb out of the branch node.
@@ -413,8 +390,8 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 			// parse the '%}'
 			lexparse.ParseStateFn(parseBlockEnd),
 
-			// Go back to parsing code.
-			lexparse.ParseStateFn(parseCode),
+			// Go back to parsing a sequence.
+			lexparse.ParseStateFn(parseSeq),
 		)
 		return nil
 	case lexparse.TokenTypeEOF:
@@ -503,12 +480,14 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings
 			// Replace templated variables with given data.
 			b.WriteString(data[n.Value.varName])
 		case nodeTypeBranch:
+			// condition sanity check
 			if len(n.Children) < 2 {
 				panic(fmt.Sprintf("invalid branch: %#v", n))
 			}
 
 			// Get the condition.
 			cond := n.Children[0]
+			// Condition sanity check
 			if cond.Value.typ != nodeTypeVar {
 				panic(fmt.Sprintf("invalid branch condition: %#v", cond))
 			}
@@ -523,7 +502,7 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings
 					return err
 				}
 			}
-		case nodeTypeCode:
+		case nodeTypeSeq:
 			if err := execNode(n, data, b); err != nil {
 				return err
 			}
