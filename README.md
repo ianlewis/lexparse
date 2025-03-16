@@ -55,7 +55,8 @@ The `Lexer` might produce something like the following tokens:
 | Text           | `"Hello,\n"`                                    | Text       |
 | Block Start    | `{%`                                            | Symbol     |
 | Identifier     | `if`                                            | Identifier |
-| Block Start    | `{%`                                            | Symbol     |
+| Identifier     | `name`                                          | Identifier |
+| Block End      | `%}`                                            | Symbol     |
 | Text           | `"\nWelcome "`                                  | Text       |
 | Variable Start | `{{`                                            | Symbol     |
 | Identifier     | `name`                                          | Identifier |
