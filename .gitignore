@@ -1,5 +1,15 @@
 # For markdownlint
-.git
+.git/
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+node_modules/
+.bin/
+.venv/
+.aqua/
+
+# SARIF files
+*.sarif.json
 
 # Binaries for programs and plugins
 *.exe
@@ -18,6 +28,3 @@
 vendor/
 node_modules/
 .venv
-
-# SARIF files
-*.sarif.json
