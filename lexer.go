@@ -167,7 +167,7 @@ func (l *Lexer) Cursor() int {
 	return l.startPos
 }
 
-// Token returns the current token token value.
+// Token returns the current token value.
 func (l *Lexer) Token() string {
 	return l.b.String()
 }
@@ -485,7 +485,7 @@ func (l *Lexer) Lex(ctx context.Context) error {
 	return l.Err()
 }
 
-// Emit emits the token between the the current cursor position and reader
+// Emit emits the token between the current cursor position and reader
 // position and returns the token. If the lexer is not currently active, this
 // is a no-op. This advances the current token cursor.
 func (l *Lexer) Emit(typ TokenType) *Token {
