@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The EOF token emitted by the `Lexer` now includes the position where the EOF
   is encountered.
-- The `Parser` now includes a `SetRoot` method that allows setting the root
-  node of the parse tree. This is useful for parsers that need to build the
-  parse tree themselves instead of using the default methods on the `Parser`.
+- The `Parser` now includes `NewNode` and `SetRoot` methods. These methods are
+  useful for parsers that need to build the parse tree themselves instead of
+  using the default methods on the `Parser`.
 
 ## [0.1.0] - 2025-02-24
 
