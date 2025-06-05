@@ -70,17 +70,6 @@ func (n *exprNode) precedence() int {
 	}
 }
 
-func (n *exprNode) String() string {
-	switch n.typ {
-	case nodeTypeNum:
-		return fmt.Sprintf("%f", n.num)
-	case nodeTypeOper:
-		return n.oper
-	default:
-		return "?"
-	}
-}
-
 func tokenErr(err error, t *lexparse.Token) error {
 	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Line, t.Column)
 }
@@ -240,8 +229,8 @@ func (p *parseRHS) Run(ctx context.Context, parser *lexparse.Parser[*exprNode]) 
 	return nil
 }
 
-// Execute performs calculation based on the parsed expression tree.
-func Execute(root *lexparse.Node[*exprNode]) (float64, error) {
+// Calculate performs calculation based on the parsed expression tree.
+func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 	switch root.Value.typ {
 	case nodeTypeNum:
 		return root.Value.num, nil
@@ -249,11 +238,11 @@ func Execute(root *lexparse.Node[*exprNode]) (float64, error) {
 		if len(root.Children) != 2 {
 			return 0.0, fmt.Errorf("invalid operator node: %v", root.Value)
 		}
-		left, err := Execute(root.Children[0])
+		left, err := Calculate(root.Children[0])
 		if err != nil {
 			return 0.0, err
 		}
-		right, err := Execute(root.Children[1])
+		right, err := Calculate(root.Children[1])
 		if err != nil {
 			return 0.0, err
 		}
@@ -289,7 +278,7 @@ func Example_infixCalculator() {
 	if err != nil {
 		panic(err)
 	}
-	txt, err := Execute(t)
+	txt, err := Calculate(t)
 	if err != nil {
 		panic(err)
 	}

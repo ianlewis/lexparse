@@ -51,8 +51,8 @@ const (
 )
 
 var (
-	errUnexpectedRune       = errors.New("unexpected rune")
-	errUnexpectedIdentifier = errors.New("unexpected identifier")
+	errRune       = errors.New("unexpected rune")
+	errIdentifier = errors.New("unexpected identifier")
 )
 
 // Identifier regexp.
@@ -61,11 +61,11 @@ var (
 	symbolRegexp = regexp.MustCompile(`[{}%]+`)
 )
 
-type nodeType int
+type tmplNodeType int
 
 const (
 	// nodeTypeSeq is a node whose children are various text,if,var nodes in order.
-	nodeTypeSeq nodeType = iota
+	nodeTypeSeq tmplNodeType = iota
 
 	// nodeTypeText is a leaf node comprised of text.
 	nodeTypeText
@@ -79,14 +79,14 @@ const (
 )
 
 type tmplNode struct {
-	typ nodeType
+	typ tmplNodeType
 
 	// Fields below are populated based on node type.
 	varName string
 	text    string
 }
 
-func tokenErr(err error, t *lexparse.Token) error {
+func lexTokenErr(err error, t *lexparse.Token) error {
 	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Line, t.Column)
 }
 
@@ -135,7 +135,7 @@ func lexCode(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	case symbolRegexp.MatchString(string(rn)):
 		return lexparse.LexStateFn(lexSymbol), nil
 	default:
-		return nil, fmt.Errorf("code: %w: %q; line: %d, column: %d", errUnexpectedRune, rn, l.Line(), l.Column())
+		return nil, fmt.Errorf("code: %w: %q; line: %d, column: %d", errRune, rn, l.Line(), l.Column())
 	}
 }
 
@@ -171,7 +171,7 @@ func lexSymbol(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) 
 			return lexparse.LexStateFn(lexText), nil
 		default:
 			if rn := l.Peek(); !symbolRegexp.MatchString(string(rn)) {
-				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d", errUnexpectedRune, rn, l.Line(), l.Column())
+				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d", errRune, rn, l.Line(), l.Column())
 			}
 		}
 
@@ -242,7 +242,7 @@ func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexTypeIdentifier:
 		// Validate the variable name.
 		if !idenRegexp.MatchString(token.Value) {
-			return tokenErr(fmt.Errorf("%w: invalid variable name", errUnexpectedIdentifier), token)
+			return lexTokenErr(fmt.Errorf("%w: invalid variable name", errIdentifier), token)
 		}
 
 		// Add a variable node.
@@ -255,7 +255,7 @@ func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: parsing variable name", io.ErrUnexpectedEOF)
 	default:
-		return tokenErr(errUnexpectedIdentifier, token)
+		return lexTokenErr(errIdentifier, token)
 	}
 }
 
@@ -269,7 +269,7 @@ func parseVarEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: unclosed variable, expected %q", io.ErrUnexpectedEOF, tokenVarEnd)
 	default:
-		return fmt.Errorf("%w: expected %q", tokenErr(errUnexpectedIdentifier, token), tokenVarEnd)
+		return fmt.Errorf("%w: expected %q", lexTokenErr(errIdentifier, token), tokenVarEnd)
 	}
 }
 
@@ -278,7 +278,7 @@ func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	switch token := p.Next(); token.Type {
 	case lexTypeIdentifier:
 		if token.Value != tokenIf {
-			return fmt.Errorf("%w: expected %q", errUnexpectedIdentifier, tokenIf)
+			return fmt.Errorf("%w: expected %q", errIdentifier, tokenIf)
 		}
 
 		// Add a branch node.
@@ -305,7 +305,7 @@ func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenIf)
 	default:
-		return tokenErr(errUnexpectedIdentifier, token)
+		return lexTokenErr(errIdentifier, token)
 	}
 }
 
@@ -328,12 +328,12 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexTypeIdentifier:
 		// Validate we are at a sequence node.
 		if cur := p.Pos(); cur.Value.typ != nodeTypeSeq {
-			return tokenErr(errUnexpectedIdentifier, token)
+			return lexTokenErr(errIdentifier, token)
 		}
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: unclosed if block, looking for %q or %q", io.ErrUnexpectedEOF, tokenElse, tokenEndif)
 	default:
-		return tokenErr(errUnexpectedIdentifier, token)
+		return lexTokenErr(errIdentifier, token)
 	}
 
 	switch token.Value {
@@ -346,7 +346,7 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 
 		// Validate that we are in a conditional and there isn't already an else branch.
 		if cur := p.Pos(); cur.Value.typ != nodeTypeBranch || len(cur.Children) != 2 {
-			return tokenErr(errUnexpectedIdentifier, token)
+			return lexTokenErr(errIdentifier, token)
 		}
 
 		// Add an else sequence node to the conditional.
@@ -367,7 +367,7 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case tokenEndif:
 		p.PushState(lexparse.ParseStateFn(parseEndif))
 	default:
-		return tokenErr(fmt.Errorf("%w: looking for %q or %q", errUnexpectedIdentifier, tokenElse, tokenEndif), token)
+		return lexTokenErr(fmt.Errorf("%w: looking for %q or %q", errIdentifier, tokenElse, tokenEndif), token)
 	}
 
 	return nil
@@ -378,7 +378,7 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	switch token := p.Next(); token.Type {
 	case lexTypeIdentifier:
 		if token.Value != tokenEndif {
-			return tokenErr(fmt.Errorf("%w: looking for %q", errUnexpectedIdentifier, tokenEndif), token)
+			return lexTokenErr(fmt.Errorf("%w: looking for %q", errIdentifier, tokenEndif), token)
 		}
 
 		// Climb out of the sequence node.
@@ -398,7 +398,7 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: looking for %q", io.ErrUnexpectedEOF, tokenEndif)
 	default:
-		return tokenErr(errUnexpectedIdentifier, token)
+		return lexTokenErr(errIdentifier, token)
 	}
 }
 
@@ -412,7 +412,7 @@ func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockStart)
 	default:
-		return tokenErr(errUnexpectedIdentifier, token)
+		return lexTokenErr(errIdentifier, token)
 	}
 
 	// Validate the command token.
@@ -424,7 +424,7 @@ func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockStart)
 	default:
 		return fmt.Errorf("%w: expected %q, %q, or %q",
-			tokenErr(errUnexpectedIdentifier, token), tokenIf, tokenElse, tokenEndif)
+			lexTokenErr(errIdentifier, token), tokenIf, tokenElse, tokenEndif)
 	}
 
 	// Handle the block command.
@@ -434,8 +434,8 @@ func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case tokenElse, tokenEndif:
 		// NOTE: parseElse,parseEndif should already be on the stack.
 	default:
-		return tokenErr(
-			fmt.Errorf("%w: expected %q, %q, or %q", errUnexpectedIdentifier, tokenIf, tokenElse, tokenEndif), token)
+		return lexTokenErr(
+			fmt.Errorf("%w: expected %q, %q, or %q", errIdentifier, tokenIf, tokenElse, tokenEndif), token)
 	}
 
 	return nil
@@ -449,7 +449,7 @@ func parseBlockEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	case lexparse.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockEnd)
 	default:
-		return tokenErr(fmt.Errorf("%w: expected %q", errUnexpectedIdentifier, tokenBlockEnd), token)
+		return lexTokenErr(fmt.Errorf("%w: expected %q", errIdentifier, tokenBlockEnd), token)
 	}
 }
 

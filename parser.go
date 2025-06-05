@@ -219,18 +219,6 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 	return n
 }
 
-// PushParent creates a new node, adds it as the parent to the current node,
-// updates the current node to the new node, and returns the new node. If the
-// current node already has a parent, it is set as the new node's parent.
-func (p *Parser[V]) PushParent(v V) *Node[V] {
-	n := p.NewNode(v)
-	n.Children = append(n.Children, p.node)
-	oldParent := p.node.Parent
-	p.node.Parent = n
-	n.Parent = oldParent
-	return p.node
-}
-
 // NewNode creates a new node at the current token position and returns it
 // without adding it to the tree.
 func (p *Parser[V]) NewNode(v V) *Node[V] {
