@@ -168,7 +168,6 @@ func parseExpr(ctx context.Context, parser *lexparse.Parser[*exprNode], depth in
 		}
 		lhs = lhs2
 		t2 := parser.Next()
-		// TODO(#106): Handle close parenthesis with no open parenthesis.
 		if t2.Type != lexTypeCloseParen {
 			return nil, tokenErr(fmt.Errorf("expected closing parenthesis, got %q", t2.Value), t2)
 		}
