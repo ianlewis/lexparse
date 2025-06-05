@@ -56,6 +56,31 @@ type exprNode struct {
 	oper string  // Only used for nodeTypeOper.
 }
 
+func (n *exprNode) precedence() int {
+	if n.typ != nodeTypeOper {
+		panic(fmt.Errorf("node %v is not an operator node", n))
+	}
+	switch n.oper {
+	case "+", "-":
+		return 1
+	case "*", "/":
+		return 2
+	default:
+		return 0
+	}
+}
+
+func (n *exprNode) String() string {
+	switch n.typ {
+	case nodeTypeNum:
+		return fmt.Sprintf("%f", n.num)
+	case nodeTypeOper:
+		return n.oper
+	default:
+		return "?"
+	}
+}
+
 func tokenErr(err error, t *lexparse.Token) error {
 	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Line, t.Column)
 }
@@ -126,96 +151,130 @@ func lexNum(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	}
 }
 
-// parseRoot is the same as [parseExpr] but it does not expect EOF.
-func parseRoot(_ context.Context, p *lexparse.Parser[*exprNode]) error {
-	t := p.Peek()
-	if t.Type == lexparse.TokenTypeEOF {
-		return tokenErr(io.ErrUnexpectedEOF, t)
-	}
-	p.PushState(lexparse.ParseStateFn(parseExpr))
-	return nil
+// pratt implements a Pratt operator-precedence parser for infix expressions.
+func pratt(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
+	n, err := parseExpr(ctx, parser, 0, 0)
+	parser.SetRoot(n)
+	return err
 }
 
-// parseExpr parses an expression from the input stream. It expects to encounter
-// a number, open parenthesis, or EOF.
-func parseExpr(_ context.Context, p *lexparse.Parser[*exprNode]) error {
-	t := p.Next()
-	fmt.Printf("parseExpr: %#v\n", t)
+func parseExpr(ctx context.Context, parser *lexparse.Parser[*exprNode], depth int, minPrecedence int) (*lexparse.Node[*exprNode], error) {
+	t := parser.Next()
+	var lhs *lexparse.Node[*exprNode]
 	switch t.Type {
 	case lexTypeNum:
-		// Create a leaf node for the number.
 		num, err := strconv.ParseFloat(t.Value, 64)
 		if err != nil {
-			return tokenErr(err, t)
+			return nil, tokenErr(err, t)
 		}
-
-		p.Push(&exprNode{
+		lhs = parser.NewNode(&exprNode{
 			typ: nodeTypeNum,
 			num: num,
 		})
-		p.PushState(lexparse.ParseStateFn(parseOper))
 	case lexTypeOpenParen:
-		// Push the state to parse the expression inside the parenthesis.
-		p.PushState(
-			lexparse.ParseStateFn(parseExpr),
-			lexparse.ParseStateFn(parseCloseParen),
-		)
-	case lexparse.TokenTypeEOF:
-		return nil
+		// Parse the expression inside the parentheses.
+		lhs2, err := parseExpr(ctx, parser, depth+1, 0)
+		if err != nil {
+			return nil, err
+		}
+		lhs = lhs2
+		t2 := parser.Next()
+		// TODO(#106): Handle close parenthesis with no open parenthesis.
+		if t2.Type != lexTypeCloseParen {
+			return nil, tokenErr(fmt.Errorf("expected closing parenthesis, got %q", t2.Value), t2)
+		}
 	default:
-		fmt.Printf("parseExpr: unexpected token: %#v\n", t)
-		// return tokenErr(errUnexpectedIdentifier, t)
-		return tokenErr(fmt.Errorf("parseExpr:%w", errUnexpectedIdentifier), t)
+		return nil, tokenErr(errUnexpectedIdentifier, t)
 	}
-	return nil
+
+outerL:
+	for {
+		var opVal *exprNode
+		opToken := parser.Peek()
+		switch opToken.Type {
+		case lexTypeOper:
+			opVal = &exprNode{
+				typ:  nodeTypeOper,
+				oper: opToken.Value,
+			}
+		case lexparse.TokenTypeEOF:
+			break outerL
+		case lexTypeCloseParen:
+			if depth == 0 {
+				return nil, tokenErr(fmt.Errorf("unmatched closing parenthesis"), opToken)
+			}
+			break outerL
+		default:
+			return nil, tokenErr(errUnexpectedIdentifier, opToken)
+		}
+
+		if opVal.precedence() < minPrecedence {
+			// If the operator precedence is less than the minimum precedence,
+			// stop parsing.
+			return lhs, nil
+		}
+
+		_ = parser.Next() // Consume the operator token.
+		opNode := parser.NewNode(opVal)
+
+		rhs, err := parseExpr(ctx, parser, depth, opNode.Value.precedence())
+		if err != nil {
+			return nil, err
+		}
+
+		// Add the operator's children.
+		opNode.Children = append(opNode.Children, lhs, rhs)
+		lhs = opNode
+	}
+
+	return lhs, nil
 }
 
-// parseOper parses an operator from the input stream. It expects to encounter
-// an operator, close parenthesis, or EOF.
-func parseOper(_ context.Context, p *lexparse.Parser[*exprNode]) error {
-	t := p.Peek()
-	fmt.Printf("parseOper: %#v\n", t)
-	switch t.Type {
-	case lexTypeOper:
-		_ = p.Next() // Consume the operator token.
-
-		// Create a node for the operator.
-		p.Push(&exprNode{
-			typ:  nodeTypeOper,
-			oper: t.Value,
-		})
-		p.PushState(lexparse.ParseStateFn(parseExpr))
-	case lexTypeCloseParen:
-		// If we encounter a close parenthesis return so it can be handled.
-		// parseCloseParen should already be on the stack.
-	case lexparse.TokenTypeEOF:
-		// return tokenErr(fmt.Errorf("%w: unclosed parenthesis?", io.ErrUnexpectedEOF), t)
-	default:
-		// return tokenErr(errUnexpectedIdentifier, t)
-		return tokenErr(fmt.Errorf("parseOper:%w", errUnexpectedIdentifier), t)
-	}
-	return nil
+type parseRHS struct {
+	lhs *exprNode
 }
 
-func parseCloseParen(_ context.Context, p *lexparse.Parser[*exprNode]) error {
-	t := p.Next()
-	fmt.Printf("parseCloseParen: %#v\n", t)
-	switch t.Type {
-	case lexTypeCloseParen:
-		// FIXME: Handle the close parenthesis.
-		p.PushState(lexparse.ParseStateFn(parseOper))
-	case lexparse.TokenTypeEOF:
-		return fmt.Errorf("%w: unclosed parentheses", io.ErrUnexpectedEOF)
-	default:
-		// return tokenErr(errUnexpectedIdentifier, t)
-		return tokenErr(fmt.Errorf("parseCloseParen:%w", errUnexpectedIdentifier), t)
-	}
+// parseRHS adds the parsed right-hand side of an expression with the left-hand
+// side to the AST.
+func (p *parseRHS) Run(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
 	return nil
 }
 
 // Execute performs calculation based on the parsed expression tree.
 func Execute(root *lexparse.Node[*exprNode]) (float64, error) {
-	return 0.0, nil
+	switch root.Value.typ {
+	case nodeTypeNum:
+		return root.Value.num, nil
+	case nodeTypeOper:
+		if len(root.Children) != 2 {
+			return 0.0, fmt.Errorf("invalid operator node: %v", root.Value)
+		}
+		left, err := Execute(root.Children[0])
+		if err != nil {
+			return 0.0, err
+		}
+		right, err := Execute(root.Children[1])
+		if err != nil {
+			return 0.0, err
+		}
+		switch root.Value.oper {
+		case "+":
+			return left + right, nil
+		case "-":
+			return left - right, nil
+		case "*":
+			return left * right, nil
+		case "/":
+			if right == 0 {
+				return 0.0, fmt.Errorf("division by zero")
+			}
+			return left / right, nil
+		default:
+			return 0.0, fmt.Errorf("unknown operator: %s", root.Value.oper)
+		}
+	default:
+		return 0.0, fmt.Errorf("invalid node type: %v", root.Value.typ)
+	}
 }
 
 func Example_infixCalculator() {
@@ -225,7 +284,7 @@ func Example_infixCalculator() {
 	t, err := lexparse.LexParse(
 		context.Background(),
 		lexparse.NewLexer(r, tokens, lexparse.LexStateFn(lexExpression)),
-		lexparse.NewParser(tokens, lexparse.ParseStateFn(parseRoot)),
+		lexparse.NewParser(tokens, lexparse.ParseStateFn(pratt)),
 	)
 	if err != nil {
 		panic(err)
@@ -236,5 +295,5 @@ func Example_infixCalculator() {
 	}
 	fmt.Print(txt)
 
-	// Output: 2.2857142857142856
+	// Output: 2.4157894736842107
 }

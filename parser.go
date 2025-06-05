@@ -161,6 +161,14 @@ func (p *Parser[V]) PushState(states ...ParseState[V]) {
 	}
 }
 
+// SetRoot sets the root of the parse tree to the given node. The current node
+// is also set to the root node. This is useful for resetting the parser to a
+// new root node.
+func (p *Parser[V]) SetRoot(root *Node[V]) {
+	p.root = root
+	p.node = root
+}
+
 // Root returns the root of the parse tree.
 func (p *Parser[V]) Root() *Node[V] {
 	return p.root
@@ -173,7 +181,9 @@ func (p *Parser[V]) Peek() *Token {
 	}
 	l, ok := <-p.tokens
 	if !ok {
-		return &tokenEOF
+		// Return the last token received fif the channel is closed.
+		// It should be the EOF token.
+		return p.token
 	}
 	p.next = l
 	return p.next
@@ -188,8 +198,7 @@ func (p *Parser[V]) Next() *Token {
 	return p.token
 }
 
-// Pos returns the current node position in the tree. May return nil if a root
-// node has not been created.
+// Pos returns the current node position in the tree.
 func (p *Parser[V]) Pos() *Node[V] {
 	return p.node
 }
@@ -204,15 +213,27 @@ func (p *Parser[V]) Push(v V) *Node[V] {
 // Node creates a new node at the current token position and adds it as a
 // child to the current node. The current node is not updated.
 func (p *Parser[V]) Node(v V) *Node[V] {
-	n := p.newNode(v)
+	n := p.NewNode(v)
 	p.node.Children = append(p.node.Children, n)
 	n.Parent = p.node
 	return n
 }
 
-// newNode creates a new node at the current token position and returns it
+// PushParent creates a new node, adds it as the parent to the current node,
+// updates the current node to the new node, and returns the new node. If the
+// current node already has a parent, it is set as the new node's parent.
+func (p *Parser[V]) PushParent(v V) *Node[V] {
+	n := p.NewNode(v)
+	n.Children = append(n.Children, p.node)
+	oldParent := p.node.Parent
+	p.node.Parent = n
+	n.Parent = oldParent
+	return p.node
+}
+
+// NewNode creates a new node at the current token position and returns it
 // without adding it to the tree.
-func (p *Parser[V]) newNode(v V) *Node[V] {
+func (p *Parser[V]) NewNode(v V) *Node[V] {
 	var pos, line, col int
 	if p.token != nil {
 		pos = p.token.Pos
@@ -243,7 +264,7 @@ func (p *Parser[V]) Climb() *Node[V] {
 // old node is removed from the tree and it's value is returned. Can be used to
 // replace the root node.
 func (p *Parser[V]) Replace(v V) V {
-	n := p.newNode(v)
+	n := p.NewNode(v)
 
 	// Replace the parent.
 	n.Parent = p.node.Parent

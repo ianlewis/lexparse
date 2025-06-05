@@ -211,7 +211,14 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// expected end of tokens
 	niltoken := p.Next()
-	if diff := cmp.Diff(&tokenEOF, niltoken); diff != "" {
+	tokenEOF := &Token{
+		Type:   TokenTypeEOF,
+		Value:  "",
+		Pos:    5,
+		Line:   1,
+		Column: 6,
+	}
+	if diff := cmp.Diff(tokenEOF, niltoken); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 }
