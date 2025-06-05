@@ -37,6 +37,11 @@ const (
 var (
 	errUnexpectedRune       = errors.New("unexpected rune")
 	errUnexpectedIdentifier = errors.New("unexpected identifier")
+	errUnclosedParen        = errors.New("unclosed parenthesis")
+	errUnexpectedParen      = errors.New("unexpected closing parenthesis")
+	errDivByZero            = errors.New("division by zero")
+
+	errInvalidNode = errors.New("invalid node")
 )
 
 type nodeType int
@@ -58,7 +63,7 @@ type exprNode struct {
 
 func (n *exprNode) precedence() int {
 	if n.typ != nodeTypeOper {
-		panic(fmt.Errorf("node %v is not an operator node", n))
+		panic(fmt.Sprintf("node %v is not an operator node", n))
 	}
 	switch n.oper {
 	case "+", "-":
@@ -169,8 +174,10 @@ func parseExpr(ctx context.Context, parser *lexparse.Parser[*exprNode], depth in
 		lhs = lhs2
 		t2 := parser.Next()
 		if t2.Type != lexTypeCloseParen {
-			return nil, tokenErr(fmt.Errorf("expected closing parenthesis, got %q", t2.Value), t2)
+			return nil, tokenErr(errUnclosedParen, t2)
 		}
+	case lexparse.TokenTypeEOF:
+		return nil, tokenErr(io.ErrUnexpectedEOF, t)
 	default:
 		return nil, tokenErr(errUnexpectedIdentifier, t)
 	}
@@ -189,7 +196,7 @@ outerL:
 			break outerL
 		case lexTypeCloseParen:
 			if depth == 0 {
-				return nil, tokenErr(fmt.Errorf("unmatched closing parenthesis"), opToken)
+				return nil, tokenErr(errUnexpectedParen, opToken)
 			}
 			break outerL
 		default:
@@ -235,7 +242,7 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 		return root.Value.num, nil
 	case nodeTypeOper:
 		if len(root.Children) != 2 {
-			return 0.0, fmt.Errorf("invalid operator node: %v", root.Value)
+			return 0.0, fmt.Errorf("%w: invalid children: %v", errInvalidNode, root.Value)
 		}
 		left, err := Calculate(root.Children[0])
 		if err != nil {
@@ -254,14 +261,14 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 			return left * right, nil
 		case "/":
 			if right == 0 {
-				return 0.0, fmt.Errorf("division by zero")
+				return 0.0, errDivByZero
 			}
 			return left / right, nil
 		default:
-			return 0.0, fmt.Errorf("unknown operator: %s", root.Value.oper)
+			return 0.0, fmt.Errorf("%w: operator: %s", errInvalidNode, root.Value.oper)
 		}
 	default:
-		return 0.0, fmt.Errorf("invalid node type: %v", root.Value.typ)
+		return 0.0, fmt.Errorf("%w: node type: %v", errInvalidNode, root.Value.typ)
 	}
 }
 
