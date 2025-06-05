@@ -30,6 +30,7 @@ rules:
       - "/[Ww]hitespace/"
       - "API" # Application Programming Interface
       - "AST" # Abstract Syntax Tree
+      - "EOF" # End of File
 
       - "CHANGELOG"
       - "CODEOWNER"

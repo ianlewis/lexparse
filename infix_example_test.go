@@ -146,13 +146,16 @@ func lexNum(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 }
 
 // pratt implements a Pratt operator-precedence parser for infix expressions.
-func pratt(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
-	n, err := parseExpr(ctx, parser, 0, 0)
+func pratt(_ context.Context, parser *lexparse.Parser[*exprNode]) error {
+	n, err := parseExpr(parser, 0, 0)
 	parser.SetRoot(n)
 	return err
 }
 
-func parseExpr(ctx context.Context, parser *lexparse.Parser[*exprNode], depth int, minPrecedence int) (*lexparse.Node[*exprNode], error) {
+func parseExpr(
+	parser *lexparse.Parser[*exprNode],
+	depth, minPrecedence int,
+) (*lexparse.Node[*exprNode], error) {
 	t := parser.Next()
 	var lhs *lexparse.Node[*exprNode]
 	switch t.Type {
@@ -167,7 +170,7 @@ func parseExpr(ctx context.Context, parser *lexparse.Parser[*exprNode], depth in
 		})
 	case lexTypeOpenParen:
 		// Parse the expression inside the parentheses.
-		lhs2, err := parseExpr(ctx, parser, depth+1, 0)
+		lhs2, err := parseExpr(parser, depth+1, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +215,7 @@ outerL:
 		_ = parser.Next() // Consume the operator token.
 		opNode := parser.NewNode(opVal)
 
-		rhs, err := parseExpr(ctx, parser, depth, opNode.Value.precedence())
+		rhs, err := parseExpr(parser, depth, opNode.Value.precedence())
 		if err != nil {
 			return nil, err
 		}
