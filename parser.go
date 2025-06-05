@@ -181,7 +181,7 @@ func (p *Parser[V]) Peek() *Token {
 	}
 	l, ok := <-p.tokens
 	if !ok {
-		// Return the last token received fif the channel is closed.
+		// Return the last token received if the channel is closed.
 		// It should be the EOF token.
 		return p.token
 	}
