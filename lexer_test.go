@@ -824,7 +824,13 @@ func TestLexer_tokens(t *testing.T) {
 			Line:   1,
 			Column: 7,
 		},
-		&tokenEOF,
+		{
+			Type:   TokenTypeEOF,
+			Value:  "",
+			Pos:    13,
+			Line:   1,
+			Column: 14,
+		},
 	}
 
 	if diff := cmp.Diff(want, got); diff != "" {

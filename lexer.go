@@ -98,11 +98,6 @@ type Token struct {
 // TokenTypeEOF indicates an EOF token signalling the end of input.
 var TokenTypeEOF TokenType = -1
 
-// tokenEOF signals the end of input.
-var tokenEOF = Token{
-	Type: TokenTypeEOF,
-}
-
 // Lexer lexically processes a byte stream. It is implemented as a finite-state
 // machine in which each [LexState] implements it's own processing.
 //
@@ -445,7 +440,7 @@ func (l *Lexer) Ignore() {
 func (l *Lexer) Lex(ctx context.Context) error {
 	// Set the channel to support calls back into the Lexer.
 	defer func() {
-		l.tokens <- &tokenEOF
+		l.Emit(TokenTypeEOF)
 		close(l.tokens)
 	}()
 
