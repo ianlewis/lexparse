@@ -225,16 +225,6 @@ outerL:
 	return lhs, nil
 }
 
-type parseRHS struct {
-	lhs *exprNode
-}
-
-// parseRHS adds the parsed right-hand side of an expression with the left-hand
-// side to the AST.
-func (p *parseRHS) Run(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
-	return nil
-}
-
 // Calculate performs calculation based on the parsed expression tree.
 func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 	switch root.Value.typ {
