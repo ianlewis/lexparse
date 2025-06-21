@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"io"
+
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 // Node is the structure for a single node in the parse tree.
@@ -80,7 +82,7 @@ func (s *stack[V]) pop() ParseState[V] {
 
 // NewParser creates a new Parser that reads from the tokens channel. The
 // parser is initialized with a root node with an empty value.
-func NewParser[V comparable](tokens <-chan *Token, startingState ParseState[V]) *Parser[V] {
+func NewParser[V comparable](tokens <-chan *lexer.Token, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
 		stateStack: &stack[V]{},
@@ -102,7 +104,7 @@ func NewParser[V comparable](tokens <-chan *Token, startingState ParseState[V]) 
 // by parser states.
 type Parser[V comparable] struct {
 	// tokens is a channel from which the parser will retrieve tokens from the lexer.
-	tokens <-chan *Token
+	tokens <-chan *lexer.Token
 
 	// stateStack is a stack of expected future states of the parser.
 	stateStack *stack[V]
@@ -114,10 +116,10 @@ type Parser[V comparable] struct {
 	node *Node[V]
 
 	// token is the current token in the stream.
-	token *Token
+	token *lexer.Token
 
 	// next is the next token in the stream.
-	next *Token
+	next *lexer.Token
 }
 
 // Parse builds a parse tree by repeatedly pulling [ParseState] objects from
@@ -175,7 +177,7 @@ func (p *Parser[V]) Root() *Node[V] {
 }
 
 // Peek returns the next token from the lexer without consuming it.
-func (p *Parser[V]) Peek() *Token {
+func (p *Parser[V]) Peek() *lexer.Token {
 	if p.next != nil {
 		return p.next
 	}
@@ -191,7 +193,7 @@ func (p *Parser[V]) Peek() *Token {
 
 // Next returns the next token from the lexer. This is the new current token
 // position.
-func (p *Parser[V]) Next() *Token {
+func (p *Parser[V]) Next() *lexer.Token {
 	l := p.Peek()
 	p.next = nil
 	p.token = l
