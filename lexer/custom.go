@@ -1,4 +1,5 @@
 // Copyright 2023 Google LLC
+// Copyright 2025 Ian Lewis
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,44 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package lexparse
+package lexer
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ianlewis/runeio"
 )
-
-// BufferedRuneReader implements functionality that allows for allow for zero-copy
-// reading of a rune stream.
-type BufferedRuneReader interface {
-	io.RuneReader
-
-	// Buffered returns the number of runes currently buffered.
-	//
-	// This value becomes invalid following the next Read/Discard operation.
-	Buffered() int
-
-	// Peek returns the next n runes from the buffer without advancing the
-	// reader. The runes stop being valid at the next read call. If Peek
-	// returns fewer than n runes, it also returns an error indicating why the
-	// read is short. ErrBufferFull is returned if n is larger than the
-	// reader's buffer size.
-	Peek(n int) ([]rune, error)
-
-	// Discard attempts to discard n runes and returns the number actually
-	// discarded. If the number of runes discarded is different than n, then an
-	// error is returned explaining the reason.
-	Discard(n int) (int, error)
-}
-
-// EOF is a rune that indicates that the lexer has finished processing.
-var EOF rune = -1
-
-// TokenType is a user-defined Token type.
-type TokenType int
 
 // LexState is the state of the current lexing state machine. It defines the logic
 // to process the current state and returns the next state.
@@ -57,15 +32,15 @@ type LexState interface {
 	// Run returns the next state to transition to or an error. If the returned
 	// next state is nil or the returned error is io.EOF then the Lexer
 	// finishes processing normally.
-	Run(context.Context, *Lexer) (LexState, error)
+	Run(context.Context, *CustomLexer) (LexState, error)
 }
 
 type lexFnState struct {
-	f func(context.Context, *Lexer) (LexState, error)
+	f func(context.Context, *CustomLexer) (LexState, error)
 }
 
 // Run implements LexState.Run.
-func (s *lexFnState) Run(ctx context.Context, l *Lexer) (LexState, error) {
+func (s *lexFnState) Run(ctx context.Context, l *CustomLexer) (LexState, error) {
 	if s.f == nil {
 		return nil, nil
 	}
@@ -73,30 +48,9 @@ func (s *lexFnState) Run(ctx context.Context, l *Lexer) (LexState, error) {
 }
 
 // LexStateFn creates a State from the given Run function.
-func LexStateFn(f func(context.Context, *Lexer) (LexState, error)) LexState {
+func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexState {
 	return &lexFnState{f}
 }
-
-// Token is a tokenized input which can be emitted by a Lexer.
-type Token struct {
-	// Type is the Token's type.
-	Type TokenType
-
-	// Value is the Token's value.
-	Value string
-
-	// Pos is the position in the byte stream where the Token was found.
-	Pos int
-
-	// Line is the line number where the Token was found (one-based).
-	Line int
-
-	// Column is the column in the line where the Token was found (one-based).
-	Column int
-}
-
-// TokenTypeEOF indicates an EOF token signalling the end of input.
-var TokenTypeEOF TokenType = -1
 
 // Lexer lexically processes a byte stream. It is implemented as a finite-state
 // machine in which each [LexState] implements it's own processing.
@@ -104,15 +58,15 @@ var TokenTypeEOF TokenType = -1
 // A Lexer maintains an internal cursor which marks the start of the next
 // token being currently processed. The Lexer can then advance the reader to
 // find the end of the token before emitting it.
-type Lexer struct {
-	// tokens is a channel into which [Token]'s will be emitted.
-	tokens chan<- *Token
+type CustomLexer struct {
+	// buf is a buffer of tokens that have been emitted but not yet processed.
+	buf []*Token
 
 	// state is the current state of the Lexer.
 	state LexState
 
 	// r is the underlying reader to read from.
-	r BufferedRuneReader
+	r *runeio.RuneReader
 
 	// b is a strings builder that stores the current token value.
 	b strings.Builder
@@ -139,53 +93,59 @@ type Lexer struct {
 	err error
 }
 
-// NewLexer creates a new Lexer initialized with the given starting [LexState].
+// NewCustomLexer creates a new Lexer initialized with the given starting [LexState].
 // The Lexer takes ownership of the tokens channel and closes it when lexing
 // is completed.
-func NewLexer(r BufferedRuneReader, tokens chan<- *Token, startingState LexState) *Lexer {
-	l := &Lexer{
-		state:  startingState,
-		tokens: tokens,
+func NewCustomLexer(r io.Reader, startingState LexState) *CustomLexer {
+	l := &CustomLexer{
+		state: startingState,
 	}
-	l.r = r
+
+	// If already a *bufio.Reader, use it directly.
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
+
+	l.r = runeio.NewReader(br)
 	return l
 }
 
 // Pos returns the current position of the underlying reader.
-func (l *Lexer) Pos() int {
+func (l *CustomLexer) Pos() int {
 	return l.pos
 }
 
 // Cursor returns the current position of the underlying cursor marking the
 // beginning of the current token being processed.
-func (l *Lexer) Cursor() int {
+func (l *CustomLexer) Cursor() int {
 	return l.startPos
 }
 
 // Token returns the current token value.
-func (l *Lexer) Token() string {
+func (l *CustomLexer) Token() string {
 	return l.b.String()
 }
 
 // Width returns the current width of the token being processed. It is
 // equivalent to l.Pos() - l.Cursor().
-func (l *Lexer) Width() int {
+func (l *CustomLexer) Width() int {
 	return l.pos - l.startPos
 }
 
 // Line returns the current line in the input (one-based).
-func (l *Lexer) Line() int {
+func (l *CustomLexer) Line() int {
 	return l.line + 1
 }
 
 // Column returns the current column in the input (one-based).
-func (l *Lexer) Column() int {
+func (l *CustomLexer) Column() int {
 	return l.column + 1
 }
 
 // Next returns the next rune of input, advancing the reader while not
 // advancing the cursor.
-func (l *Lexer) Next() rune {
+func (l *CustomLexer) Next() rune {
 	if l.err != nil {
 		return EOF
 	}
@@ -207,9 +167,42 @@ func (l *Lexer) Next() rune {
 	return rn
 }
 
+// NextToken implements [Lexer.NextToken] and returns the next token from the
+// input stream. If the end of the input is reached, a token with type
+// [TokenTypeEOF] is returned.
+func (l *CustomLexer) NextToken(ctx context.Context) (Token, error) {
+	if l.err != nil {
+		return *l.newToken(TokenTypeEOF), l.err
+	}
+
+	// If we have no tokens to return, we need to run the current state.
+	for len(l.buf) == 0 && l.state != nil {
+		var err error
+		l.state, err = l.state.Run(ctx, l)
+		l.setErr(err)
+		if l.err != nil {
+			return *l.newToken(TokenTypeEOF), l.err
+		}
+	}
+
+	if len(l.buf) > 0 {
+		// If we have already emitted tokens, return the next one.
+		token := l.buf[0]
+		if token.Type != TokenTypeEOF {
+			l.buf = l.buf[1:]
+		}
+		return *token, nil
+	}
+
+	// The state is nil and we have no tokens to return, so we are at the end
+	// of the input.
+	l.err = io.EOF
+	return *l.newToken(TokenTypeEOF), l.err
+}
+
 // Peek returns the next rune from the buffer without advancing the reader or
 // current token cursor.
-func (l *Lexer) Peek() rune {
+func (l *CustomLexer) Peek() rune {
 	p := l.PeekN(1)
 	if len(p) < 1 {
 		return EOF
@@ -220,7 +213,7 @@ func (l *Lexer) Peek() rune {
 // PeekN returns the next n runes from the buffer without advancing the reader
 // or current token cursor. PeekN may return fewer runes than requested if an
 // error occurs or at end of input.
-func (l *Lexer) PeekN(n int) []rune {
+func (l *CustomLexer) PeekN(n int) []rune {
 	if l.err != nil {
 		return nil
 	}
@@ -232,31 +225,31 @@ func (l *Lexer) PeekN(n int) []rune {
 
 // Advance attempts to advance the underlying reader a single rune and returns
 // true if actually advanced. The current token cursor position is not updated.
-func (l *Lexer) Advance() bool {
+func (l *CustomLexer) Advance() bool {
 	return l.advance(1, false) == 1
 }
 
 // AdvanceN attempts to advance the underlying reader n runes and returns the
 // number actually advanced. The current token cursor position is not updated.
-func (l *Lexer) AdvanceN(n int) int {
+func (l *CustomLexer) AdvanceN(n int) int {
 	return l.advance(n, false)
 }
 
 // Discard attempts to discard the next rune, advancing the current token
 // cursor, and returns true if actually discarded.
-func (l *Lexer) Discard() bool {
+func (l *CustomLexer) Discard() bool {
 	return l.DiscardN(1) == 1
 }
 
 // DiscardN attempts to discard n runes, advancing the current token cursor
 // position, and returns the number actually discarded.
-func (l *Lexer) DiscardN(n int) int {
+func (l *CustomLexer) DiscardN(n int) int {
 	return l.advance(n, true)
 }
 
 // advance attempts to advance the reader n runes. If discard is true the token
 // cursor position is updated as well.
-func (l *Lexer) advance(n int, discard bool) int {
+func (l *CustomLexer) advance(n int, discard bool) int {
 	if l.err != nil {
 		return 0
 	}
@@ -335,7 +328,7 @@ func (l *Lexer) advance(n int, discard bool) int {
 // reader, and stopping when one of the strings is found. The token cursor is
 // not advanced. The string found is returned. If no match is found an empty
 // string is returned.
-func (l *Lexer) Find(q []string) string {
+func (l *CustomLexer) Find(q []string) string {
 	var maxLen int
 	for i := range q {
 		if len(q[i]) > maxLen {
@@ -370,7 +363,7 @@ func (l *Lexer) Find(q []string) string {
 // reader, and stopping when one of the strings is found. The token cursor is
 // advanced and data prior to the search string is discarded. The string found is
 // returned. If no match is found an empty string is returned.
-func (l *Lexer) DiscardTo(q []string) string {
+func (l *CustomLexer) DiscardTo(q []string) string {
 	var maxLen int
 	for i := range q {
 		if len(q[i]) > maxLen {
@@ -421,93 +414,46 @@ func (l *Lexer) DiscardTo(q []string) string {
 
 // Ignore ignores the previous input and resets the token start position to
 // the current reader position.
-func (l *Lexer) Ignore() {
+func (l *CustomLexer) Ignore() {
 	l.startPos = l.pos
 	l.startLine = l.line
 	l.startColumn = l.column
 	l.b.Reset()
 }
 
-// Lex parses the content and passes tokens to the given channel. Run is
-// called on each [LexState] starting with the initial state. Each [LexState]
-// then returns the subsequent state which is run until a state returns nil
-// indicating that lexing has finished.
-//
-// Note that a separate goroutine should process tokens passed to the tokens
-// channel or Lex will block indefinitely when the channel buffer is filled.
-//
-// The caller can request that the lexer stop by cancelling ctx.
-func (l *Lexer) Lex(ctx context.Context) error {
-	// Set the channel to support calls back into the Lexer.
-	defer func() {
-		l.Emit(TokenTypeEOF)
-		close(l.tokens)
-	}()
-
-	for l.state != nil {
-		select {
-		case <-ctx.Done():
-			if err := ctx.Err(); err != nil {
-				//nolint:wrapcheck // Wrapping errors at this level is not user friendly.
-				return err
-			}
-			return nil
-		default:
-		}
-
-		var err error
-		l.state, err = l.state.Run(ctx, l)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-
-			//nolint:wrapcheck // Wrapping errors at this level is not user friendly.
-			return err
-		}
-
-		// Return early if an error has occurred.
-		if err := l.Err(); err != nil {
-			return l.Err()
-		}
-	}
-
-	if err := ctx.Err(); err != nil {
-		//nolint:wrapcheck // Wrapping errors at this level is not user friendly.
-		return err
-	}
-
-	return l.Err()
-}
-
 // Emit emits the token between the current cursor position and reader
 // position and returns the token. If the lexer is not currently active, this
 // is a no-op. This advances the current token cursor.
-func (l *Lexer) Emit(typ TokenType) *Token {
-	if l.tokens == nil {
+func (l *CustomLexer) Emit(typ TokenType) *Token {
+	if l.err != nil {
 		return nil
 	}
 
-	token := &Token{
+	token := l.newToken(typ)
+
+	// l.tokens <- token
+	l.buf = append(l.buf, token)
+	l.Ignore()
+
+	return token
+}
+
+func (l *CustomLexer) newToken(typ TokenType) *Token {
+	return &Token{
 		Type:   typ,
 		Value:  l.b.String(),
 		Pos:    l.startPos,
 		Line:   l.startLine + 1,
 		Column: l.startColumn + 1,
 	}
-
-	l.tokens <- token
-	l.Ignore()
-
-	return token
 }
 
 // Err returns any errors that the lexer encountered.
-func (l *Lexer) Err() error {
+func (l *CustomLexer) Err() error {
 	return l.err
 }
 
-func (l *Lexer) setErr(err error) {
+func (l *CustomLexer) setErr(err error) {
 	if l.err == nil && !errors.Is(err, io.EOF) {
 		l.err = err
 	}
