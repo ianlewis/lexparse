@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 const (
@@ -57,32 +59,24 @@ func TestLexer_Peek(t *testing.T) {
 		t.Errorf("Peek: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.Pos(), 0; got != want {
-		t.Errorf("Pos: want: %v, got: %v", want, got)
+	expectedPos := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Cursor(), 0; got != want {
-		t.Errorf("Cursor: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Line(), 1; got != want {
-		t.Errorf("Line: want: %v, got: %v", want, got)
+	expectedCursor := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Column(), 1; got != want {
-		t.Errorf("Column: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startPos, 0; got != want {
-		t.Errorf("startPos: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startLine, 0; got != want {
-		t.Errorf("startLine: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startColumn, 0; got != want {
-		t.Errorf("startColumn: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 }
 
@@ -107,32 +101,24 @@ func TestLexer_PeekN(t *testing.T) {
 		t.Errorf("Peek: want: %q, got: %q", want, got)
 	}
 
-	if got, want := l.Pos(), 0; got != want {
-		t.Errorf("Pos: want: %v, got: %v", want, got)
+	expectedPos := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Cursor(), 0; got != want {
-		t.Errorf("Cursor: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Line(), 1; got != want {
-		t.Errorf("Line: want: %v, got: %v", want, got)
+	expectedCursor := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Column(), 1; got != want {
-		t.Errorf("Column: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startPos, 0; got != want {
-		t.Errorf("startPos: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startLine, 0; got != want {
-		t.Errorf("startLine: want: %v, got: %v", want, got)
-	}
-
-	if got, want := l.startColumn, 0; got != want {
-		t.Errorf("startColumn: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 }
 
@@ -160,28 +146,32 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("PeekN: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 1; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 1,
+			Line:   1,
+			Column: 2,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 1; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 2; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 1; got != want {
-			t.Errorf("Width: want: %q, got: %q", want, got)
+		if diff := cmp.Diff(1, l.Width()); diff != "" {
+			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Token(), "H"; got != want {
-			t.Errorf("Token: want: %q, got: %q", want, got)
+		if diff := cmp.Diff("H", l.Token()); diff != "" {
+			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 	})
 
@@ -198,20 +188,24 @@ func TestLexer_Advance(t *testing.T) {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Pos(), 0; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 1; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 1; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -248,20 +242,24 @@ func TestLexer_AdvanceN(t *testing.T) {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 5; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 5,
+			Line:   1,
+			Column: 6,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 1; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 6; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 5; got != want {
@@ -286,20 +284,24 @@ func TestLexer_AdvanceN(t *testing.T) {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Pos(), 15; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 15,
+			Line:   2,
+			Column: 10,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 10; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 15; got != want {
@@ -336,20 +338,24 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("PeekN: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 1; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 1,
+			Line:   1,
+			Column: 2,
 		}
 
-		if got, want := l.Cursor(), 1; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 1; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 1,
+			Line:   1,
+			Column: 2,
 		}
 
-		if got, want := l.Column(), 2; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -374,20 +380,24 @@ func TestLexer_Discard(t *testing.T) {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Pos(), 0; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 1; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 1; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -424,20 +434,24 @@ func TestLexer_DiscardN(t *testing.T) {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 7; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Cursor(), 7; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Column(), 2; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -462,20 +476,24 @@ func TestLexer_DiscardN(t *testing.T) {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Pos(), 15; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 15,
+			Line:   2,
+			Column: 10,
 		}
 
-		if got, want := l.Cursor(), 15; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 15,
+			Line:   2,
+			Column: 10,
 		}
 
-		if got, want := l.Column(), 10; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -511,20 +529,24 @@ func TestLexer_Find_match(t *testing.T) {
 		t.Errorf("Peek: want: %q, got: %q", want, got)
 	}
 
-	if got, want := l.Pos(), 7; got != want {
-		t.Errorf("Pos: want: %v, got: %v", want, got)
+	expectedPos := Position{
+		Offset: 7,
+		Line:   2,
+		Column: 2,
 	}
 
-	if got, want := l.Cursor(), 0; got != want {
-		t.Errorf("Cursor: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Line(), 2; got != want {
-		t.Errorf("Line: want: %v, got: %v", want, got)
+	expectedCursor := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Column(), 2; got != want {
-		t.Errorf("Column: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
 	if got, want := l.Width(), 7; got != want {
@@ -550,20 +572,24 @@ func TestLexer_Find_short_match(t *testing.T) {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
 
-	if got, want := l.Pos(), 7; got != want {
-		t.Errorf("Pos: want: %v, got: %v", want, got)
+	expectedPos := Position{
+		Offset: 7,
+		Line:   2,
+		Column: 2,
 	}
 
-	if got, want := l.Cursor(), 0; got != want {
-		t.Errorf("Cursor: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Line(), 2; got != want {
-		t.Errorf("Line: want: %v, got: %v", want, got)
+	expectedCursor := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Column(), 2; got != want {
-		t.Errorf("Column: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
 	if got, want := l.Width(), 7; got != want {
@@ -588,20 +614,24 @@ func TestLexer_Find_no_match(t *testing.T) {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
 
-	if got, want := l.Pos(), 12; got != want {
-		t.Errorf("Pos: want: %v, got: %v", want, got)
+	expectedPos := Position{
+		Offset: 12,
+		Line:   2,
+		Column: 7,
 	}
 
-	if got, want := l.Cursor(), 0; got != want {
-		t.Errorf("Cursor: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Line(), 2; got != want {
-		t.Errorf("Line: want: %v, got: %v", want, got)
+	expectedCursor := Position{
+		Offset: 0,
+		Line:   1,
+		Column: 1,
 	}
 
-	if got, want := l.Column(), 7; got != want {
-		t.Errorf("Column: want: %v, got: %v", want, got)
+	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
 	if got, want := l.Width(), 12; got != want {
@@ -637,20 +667,24 @@ func TestLexer_Ignore(t *testing.T) {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 7; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Cursor(), 0; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		}
 
-		if got, want := l.Column(), 2; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 7; got != want {
@@ -679,20 +713,24 @@ func TestLexer_Ignore(t *testing.T) {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 14; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos = Position{
+			Offset: 14,
+			Line:   2,
+			Column: 9,
 		}
 
-		if got, want := l.Cursor(), 7; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor = Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Column(), 9; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 7; got != want {
@@ -729,20 +767,24 @@ func TestLexer_DiscardTo(t *testing.T) {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 7; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Cursor(), 7; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 7,
+			Line:   2,
+			Column: 2,
 		}
 
-		if got, want := l.Column(), 2; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {
@@ -767,20 +809,24 @@ func TestLexer_DiscardTo(t *testing.T) {
 			t.Errorf("unexpected token: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Pos(), 12; got != want {
-			t.Errorf("Pos: want: %v, got: %v", want, got)
+		expectedPos := Position{
+			Offset: 12,
+			Line:   2,
+			Column: 7,
 		}
 
-		if got, want := l.Cursor(), 12; got != want {
-			t.Errorf("Cursor: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Line(), 2; got != want {
-			t.Errorf("Line: want: %v, got: %v", want, got)
+		expectedCursor := Position{
+			Offset: 12,
+			Line:   2,
+			Column: 7,
 		}
 
-		if got, want := l.Column(), 7; got != want {
-			t.Errorf("Column: want: %v, got: %v", want, got)
+		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
 		if got, want := l.Width(), 0; got != want {

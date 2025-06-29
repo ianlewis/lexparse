@@ -16,9 +16,6 @@ package lexer
 
 import "context"
 
-// EOF is a rune that indicates that the lexer has finished processing.
-var EOF rune = -1
-
 // TokenType is a user-defined Token type.
 type TokenType int
 
@@ -34,16 +31,26 @@ type Token struct {
 	Value string
 
 	// Pos is the position in the byte stream where the Token was found.
-	Pos int
-
-	// Line is the line number where the Token was found (one-based).
-	Line int
-
-	// Column is the column in the line where the Token was found (one-based).
-	Column int
+	Pos Position
 }
 
+// String returns a string representation of the Token.
+func (t Token) String() string {
+	if t.Type == TokenTypeEOF {
+		return "EOF"
+	}
+	return t.Value
+}
+
+// Lexer is an interface that defines the methods for a lexer that tokenizes
+// input streams. It reads from an input stream and emits [Token]s.
 type Lexer interface {
-	// NextToken returns the next token from the input.
-	NextToken(context.Context) (Token, error)
+	// NextToken returns the next token from the input. If there are no more
+	// tokens, or an error occurs, it returns a Token with Type set to
+	// [TokenTypeEOF].
+	NextToken(context.Context) Token
+
+	// Err returns the error encountered by the lexer, if any. If the error
+	// encountered is [io.EOF], it will return nil.
+	Err() error
 }
