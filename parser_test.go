@@ -18,9 +18,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ianlewis/runeio"
+
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 func newTree[V comparable](n ...*Node[V]) *Node[V] {
@@ -40,16 +42,44 @@ func addParent[V comparable](n *Node[V]) *Node[V] {
 	return n
 }
 
+const (
+	wordType lexer.TokenType = iota + 1
+)
+
+type lexWordState struct{}
+
+func (w *lexWordState) Run(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
+	rn := l.Peek()
+	if unicode.IsSpace(rn) || rn == lexer.EOF {
+		// NOTE: This can emit empty words.
+		l.Emit(wordType)
+		// Discard the space
+		if !l.Discard() {
+			return nil, nil
+		}
+	}
+
+	l.Advance()
+
+	return w, nil
+}
+
 // testLexer creates and returns a lexer.
-func testLexer(t *testing.T, input string) <-chan *Token {
+func testLexer(t *testing.T, input string) <-chan *lexer.Token {
 	t.Helper()
 
 	// Run the lexer filling the channel buffer. Test input should not exceed this buffer.
-	tokens := make(chan *Token, 1024)
-	l := NewLexer(runeio.NewReader(strings.NewReader(input)), tokens, &lexWordState{})
+	tokens := make(chan *lexer.Token, 1024)
+	l := lexer.NewCustomLexer(strings.NewReader(input), &lexWordState{})
 
-	if err := l.Lex(context.Background()); err != nil {
-		panic(err)
+	var token lexer.Token
+	for token.Type != lexer.TokenTypeEOF {
+		var err error
+		token, err = l.NextToken(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error from lexer: %v", err)
+		}
+		tokens <- &token
 	}
 
 	return tokens
@@ -67,7 +97,7 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 			switch token.Type {
 			case wordType:
 				// OK
-			case TokenTypeEOF:
+			case lexer.TokenTypeEOF:
 				return nil
 			default:
 				panic("unknown type")
@@ -168,7 +198,7 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// expect to read the first token "A"
 	tokenA := p.Next()
-	wanttokenA := &Token{
+	wanttokenA := &lexer.Token{
 		Type:   wordType,
 		Value:  "A",
 		Pos:    0,
@@ -180,7 +210,7 @@ func TestParser_NextPeek(t *testing.T) {
 	}
 
 	peekTokenB := p.Peek()
-	wantTokenB := &Token{
+	wantTokenB := &lexer.Token{
 		Type:   wordType,
 		Value:  "B",
 		Pos:    2,
@@ -198,7 +228,7 @@ func TestParser_NextPeek(t *testing.T) {
 	}
 
 	tokenC := p.Next()
-	wantTokenC := &Token{
+	wantTokenC := &lexer.Token{
 		Type:   wordType,
 		Value:  "C",
 		Pos:    4,
@@ -211,8 +241,8 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// expected end of tokens
 	niltoken := p.Next()
-	tokenEOF := &Token{
-		Type:   TokenTypeEOF,
+	tokenEOF := &lexer.Token{
+		Type:   lexer.TokenTypeEOF,
 		Value:  "",
 		Pos:    5,
 		Line:   1,
