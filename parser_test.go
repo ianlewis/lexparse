@@ -64,24 +64,6 @@ func (w *lexWordState) Run(_ context.Context, l *lexer.CustomLexer) (lexer.LexSt
 	return w, nil
 }
 
-// // testLexer creates and returns a lexer.
-// func testLexer(t *testing.T, input string) lexer.Lexer {
-// 	t.Helper()
-//
-// 	// Run the lexer filling the channel buffer. Test input should not exceed this buffer.
-//
-// 	var token *lexer.Token
-// 	for token.Type != lexer.TokenTypeEOF {
-// 		token = l.NextToken(context.Background())
-// 		tokens <- token
-// 	}
-// 	if err := l.Err(); err != nil {
-// 		t.Fatalf("unexpected error from lexer: %v", err)
-// 	}
-//
-// 	return tokens
-// }
-
 // testParse creates and runs a lexer, and returns the root of the parse tree.
 func testParse(t *testing.T, input string) (*Node[string], error) {
 	t.Helper()
