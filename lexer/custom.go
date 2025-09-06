@@ -146,8 +146,6 @@ func (l *CustomLexer) NextRune() rune {
 		l.setErr(err)
 		return EOF
 	}
-	fmt.Println("NextRune:", rn, "at", l.pos.Offset, "line", l.pos.Line,
-		"column", l.pos.Column)
 	l.pos.Offset++
 	l.pos.Column++
 	if rn == '\n' {
@@ -419,7 +417,6 @@ func (l *CustomLexer) Emit(typ TokenType) *Token {
 
 	token := l.newToken(typ)
 
-	// l.tokens <- token
 	l.buf = append(l.buf, token)
 	l.Ignore()
 

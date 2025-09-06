@@ -25,6 +25,10 @@ import (
 	"github.com/ianlewis/lexparse/lexer"
 )
 
+// channelBufSize is the size of the buffer for the token channel used between
+// the lexer and parser.
+var channelBufSize = 1024
+
 // tokenChan implements the [lexer.TokenSource] interface by reading tokens from
 // a channel.
 type tokenChan struct {
@@ -61,7 +65,7 @@ func LexParse[V comparable](
 	ctx, cancel := context.WithCancel(ctx)
 
 	tokens := &tokenChan{
-		c:   make(chan *lexer.Token, 1024),
+		c:   make(chan *lexer.Token, channelBufSize),
 		err: nil,
 	}
 

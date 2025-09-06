@@ -145,8 +145,8 @@ func lexNum(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 }
 
 // pratt implements a Pratt operator-precedence parser for infix expressions.
-func pratt(_ context.Context, parser *lexparse.Parser[*exprNode]) error {
-	n, err := parseExpr(context.Background(), parser, 0, 0)
+func pratt(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
+	n, err := parseExpr(ctx, parser, 0, 0)
 	parser.SetRoot(n)
 	return err
 }
@@ -159,6 +159,7 @@ func parseExpr(
 	// Check if the context is canceled.
 	select {
 	case <-ctx.Done():
+		//nolint:wrapcheck // We want to return the original context error.
 		return nil, ctx.Err()
 	default:
 	}
