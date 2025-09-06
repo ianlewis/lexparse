@@ -22,13 +22,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ianlewis/runeio"
-
 	"github.com/ianlewis/lexparse"
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 const (
-	lexTypeNum lexparse.TokenType = iota
+	lexTypeNum lexer.TokenType = iota
 	lexTypeOpenParen
 	lexTypeCloseParen
 	lexTypeOper
@@ -75,17 +74,17 @@ func (n *exprNode) precedence() int {
 	}
 }
 
-func tokenErr(err error, t *lexparse.Token) error {
-	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Line, t.Column)
+func tokenErr(err error, t *lexer.Token) error {
+	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Pos.Line, t.Pos.Column)
 }
 
 // lexExpression tokenizes normal text.
-func lexExpression(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexExpression(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		rn := l.Peek()
 		switch rn {
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			return lexparse.LexStateFn(lexNum), nil
+			return lexer.LexStateFn(lexNum), nil
 		case '(':
 			// Open parenthesis.
 			if !l.Advance() {
@@ -110,7 +109,7 @@ func lexExpression(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, err
 				panic(fmt.Errorf("%w: parsing expression", io.ErrUnexpectedEOF))
 			}
 			continue
-		case lexparse.EOF:
+		case lexer.EOF:
 			// End of file.
 			return nil, nil
 		default:
@@ -120,7 +119,7 @@ func lexExpression(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, err
 }
 
 // lexNum lexes a number from the input stream.
-func lexNum(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexNum(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		rn := l.Peek()
 		switch rn {
@@ -132,7 +131,7 @@ func lexNum(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 			if l.Width() > 0 {
 				l.Emit(lexTypeNum)
 			}
-			return lexparse.LexStateFn(lexExpression), nil
+			return lexer.LexStateFn(lexExpression), nil
 		}
 
 		// Advance the input stream.
@@ -147,16 +146,24 @@ func lexNum(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 
 // pratt implements a Pratt operator-precedence parser for infix expressions.
 func pratt(_ context.Context, parser *lexparse.Parser[*exprNode]) error {
-	n, err := parseExpr(parser, 0, 0)
+	n, err := parseExpr(context.Background(), parser, 0, 0)
 	parser.SetRoot(n)
 	return err
 }
 
 func parseExpr(
+	ctx context.Context,
 	parser *lexparse.Parser[*exprNode],
 	depth, minPrecedence int,
 ) (*lexparse.Node[*exprNode], error) {
-	t := parser.Next()
+	// Check if the context is canceled.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	t := parser.Next(ctx)
 	var lhs *lexparse.Node[*exprNode]
 	switch t.Type {
 	case lexTypeNum:
@@ -170,16 +177,16 @@ func parseExpr(
 		})
 	case lexTypeOpenParen:
 		// Parse the expression inside the parentheses.
-		lhs2, err := parseExpr(parser, depth+1, 0)
+		lhs2, err := parseExpr(ctx, parser, depth+1, 0)
 		if err != nil {
 			return nil, err
 		}
 		lhs = lhs2
-		t2 := parser.Next()
+		t2 := parser.Next(ctx)
 		if t2.Type != lexTypeCloseParen {
 			return nil, tokenErr(errUnclosedParen, t2)
 		}
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return nil, tokenErr(io.ErrUnexpectedEOF, t)
 	default:
 		return nil, tokenErr(errUnexpectedIdentifier, t)
@@ -188,14 +195,14 @@ func parseExpr(
 outerL:
 	for {
 		var opVal *exprNode
-		opToken := parser.Peek()
+		opToken := parser.Peek(ctx)
 		switch opToken.Type {
 		case lexTypeOper:
 			opVal = &exprNode{
 				typ:  nodeTypeOper,
 				oper: opToken.Value,
 			}
-		case lexparse.TokenTypeEOF:
+		case lexer.TokenTypeEOF:
 			break outerL
 		case lexTypeCloseParen:
 			if depth == 0 {
@@ -212,10 +219,10 @@ outerL:
 			return lhs, nil
 		}
 
-		_ = parser.Next() // Consume the operator token.
+		_ = parser.Next(ctx) // Consume the operator token.
 		opNode := parser.NewNode(opVal)
 
-		rhs, err := parseExpr(parser, depth, opNode.Value.precedence())
+		rhs, err := parseExpr(ctx, parser, depth, opNode.Value.precedence())
 		if err != nil {
 			return nil, err
 		}
@@ -266,13 +273,12 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 }
 
 func Example_infixCalculator() {
-	tokens := make(chan *lexparse.Token, 1024)
-	r := runeio.NewReader(strings.NewReader(`6.1 * ( 2.8 + 3.2 ) / 7.6 - 2.4`))
+	r := strings.NewReader(`6.1 * ( 2.8 + 3.2 ) / 7.6 - 2.4`)
 
 	t, err := lexparse.LexParse(
 		context.Background(),
-		lexparse.NewLexer(r, tokens, lexparse.LexStateFn(lexExpression)),
-		lexparse.NewParser(tokens, lexparse.ParseStateFn(pratt)),
+		lexer.NewCustomLexer(r, lexer.LexStateFn(lexExpression)),
+		lexparse.ParseStateFn(pratt),
 	)
 	if err != nil {
 		panic(err)

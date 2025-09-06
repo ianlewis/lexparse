@@ -80,9 +80,16 @@ func (s *stack[V]) pop() ParseState[V] {
 	return v
 }
 
+// TokenSource is an interface that defines a source of tokens for the parser.
+type TokenSource interface {
+	// NextToken returns the next token from the source. When tokens are
+	// exhausted, it returns a Token with Type set to [lexer.TokenTypeEOF].
+	NextToken(context.Context) *lexer.Token
+}
+
 // NewParser creates a new Parser that reads from the tokens channel. The
 // parser is initialized with a root node with an empty value.
-func NewParser[V comparable](tokens <-chan *lexer.Token, startingState ParseState[V]) *Parser[V] {
+func NewParser[V comparable](tokens TokenSource, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{}
 	p := &Parser[V]{
 		stateStack: &stack[V]{},
@@ -103,8 +110,8 @@ func NewParser[V comparable](tokens <-chan *lexer.Token, startingState ParseStat
 // Parser maintains a current position in the parse tree which can be utilized
 // by parser states.
 type Parser[V comparable] struct {
-	// tokens is a channel from which the parser will retrieve tokens from the lexer.
-	tokens <-chan *lexer.Token
+	// tokens is a the source of tokens for the parser.
+	tokens TokenSource
 
 	// stateStack is a stack of expected future states of the parser.
 	stateStack *stack[V]
@@ -124,9 +131,9 @@ type Parser[V comparable] struct {
 
 // Parse builds a parse tree by repeatedly pulling [ParseState] objects from
 // the stack and running them, starting with the initial state. Parsing can be
-// cancelled by ctx.
+// canceled by ctx.
 //
-// The caller can request that the parser stop by cancelling ctx.
+// The caller can request that the parser stop by canceling ctx.
 func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 	for {
 		state := p.stateStack.pop()
@@ -177,24 +184,18 @@ func (p *Parser[V]) Root() *Node[V] {
 }
 
 // Peek returns the next token from the lexer without consuming it.
-func (p *Parser[V]) Peek() *lexer.Token {
+func (p *Parser[V]) Peek(ctx context.Context) *lexer.Token {
 	if p.next != nil {
 		return p.next
 	}
-	l, ok := <-p.tokens
-	if !ok {
-		// Return the last token received if the channel is closed.
-		// It should be the EOF token.
-		return p.token
-	}
-	p.next = l
+	p.next = p.tokens.NextToken(ctx)
 	return p.next
 }
 
 // Next returns the next token from the lexer. This is the new current token
 // position.
-func (p *Parser[V]) Next() *lexer.Token {
-	l := p.Peek()
+func (p *Parser[V]) Next(ctx context.Context) *lexer.Token {
+	l := p.Peek(ctx)
 	p.next = nil
 	p.token = l
 	return p.token
@@ -226,9 +227,9 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 func (p *Parser[V]) NewNode(v V) *Node[V] {
 	var pos, line, col int
 	if p.token != nil {
-		pos = p.token.Pos
-		line = p.token.Line
-		col = p.token.Column
+		pos = p.token.Pos.Offset
+		line = p.token.Pos.Line
+		col = p.token.Pos.Column
 	}
 
 	return &Node[V]{

@@ -19,15 +19,40 @@ package lexparse
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
+
+	"github.com/ianlewis/lexparse/lexer"
 )
 
-// LexParse lexes the content starting at initState and passes the results to a
-// parser starting at initFn. The resulting root node of the parse tree is returned.
+// tokenChan implements the [lexer.TokenSource] interface by reading tokens from
+// a channel.
+type tokenChan struct {
+	c   chan *lexer.Token
+	err error
+}
+
+// NextToken implements the [lexer.TokenSource.NextToken].
+func (tc *tokenChan) NextToken(ctx context.Context) *lexer.Token {
+	// Set the error if the context is done. Note that we do not return here.
+	// The same context is used for the lexer and the lexer should return an EOF
+	// after the context is canceled in that case.
+	select {
+	case <-ctx.Done():
+		tc.err = ctx.Err()
+	default:
+	}
+
+	return <-tc.c
+}
+
+// LexParse lexes the content the given lexer and feeds the tokens to the
+// parser starting at startingState. The resulting root node of the parse tree
+// is returned.
 func LexParse[V comparable](
 	ctx context.Context,
-	l *Lexer,
-	p *Parser[V],
+	l lexer.Lexer,
+	startingState ParseState[V],
 ) (*Node[V], error) {
 	var root *Node[V]
 	var lexErr error
@@ -35,12 +60,21 @@ func LexParse[V comparable](
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 
+	tokens := &tokenChan{
+		c:   make(chan *lexer.Token, 1024),
+		err: nil,
+	}
+
+	p := NewParser(tokens, startingState)
+
 	wg.Add(1)
 	go func() {
-		lexErr = l.Lex(ctx)
-		if lexErr != nil {
-			cancel()
+		t := &lexer.Token{}
+		for t.Type != lexer.TokenTypeEOF {
+			t = l.NextToken(ctx)
+			tokens.c <- t
 		}
+		lexErr = l.Err()
 		wg.Done()
 	}()
 
@@ -56,7 +90,7 @@ func LexParse[V comparable](
 	err := lexErr
 	// Do not report context.Canceled errors from the Lexer. If the context is
 	// canceled by the caller the parser will also return this error.
-	if err == nil || errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
 		err = parseErr
 	}
 

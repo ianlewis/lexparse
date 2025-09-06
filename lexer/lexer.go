@@ -12,15 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package lexer defines a Lexer interface and related types for tokenizing
+// input streams.
 package lexer
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strconv"
+)
 
 // TokenType is a user-defined Token type.
 type TokenType int
 
-// TokenTypeEOF indicates an EOF token signalling the end of input.
+// TokenTypeEOF indicates an EOF token signaling the end of input.
 var TokenTypeEOF TokenType = -1
+
+type Position struct {
+	// Filename is the name of the file being read. It can be empty if the
+	// input is not from a file.
+	Filename string
+
+	// Offset is the byte offset in the input stream, starting at 0.
+	Offset int
+
+	// Line is the line number in the input stream, starting at 1.
+	Line int
+
+	// Column is the column number in the line, starting at 1. It counts
+	// characters in the line, including whitespace and newlines.
+	Column int
+}
+
+// String returns a string representation of the Position.
+func (p Position) String() string {
+	if p.Filename != "" {
+		return p.Filename + ":" + strconv.Itoa(p.Line) + ":" + strconv.Itoa(p.Column)
+	}
+	return strconv.Itoa(p.Line) + ":" + strconv.Itoa(p.Column)
+}
 
 // Token is a tokenized input which can be emitted by a Lexer.
 type Token struct {
@@ -36,19 +66,20 @@ type Token struct {
 
 // String returns a string representation of the Token.
 func (t Token) String() string {
+	value := t.Value
 	if t.Type == TokenTypeEOF {
-		return "EOF"
+		value = "<EOF>"
 	}
-	return t.Value
+	return fmt.Sprintf("%s: %s", t.Pos, value)
 }
 
 // Lexer is an interface that defines the methods for a lexer that tokenizes
 // input streams. It reads from an input stream and emits [Token]s.
 type Lexer interface {
 	// NextToken returns the next token from the input. If there are no more
-	// tokens, or an error occurs, it returns a Token with Type set to
-	// [TokenTypeEOF].
-	NextToken(context.Context) Token
+	// tokens, the context is canceled, or an error occurs, it returns a Token
+	// with Type set to [TokenTypeEOF].
+	NextToken(context.Context) *Token
 
 	// Err returns the error encountered by the lexer, if any. If the error
 	// encountered is [io.EOF], it will return nil.

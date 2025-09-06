@@ -22,18 +22,19 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/ianlewis/runeio"
+
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 type parseWordState struct{}
 
-func (w *parseWordState) Run(_ context.Context, p *Parser[string]) error {
-	switch token := p.Next(); token.Type {
+func (w *parseWordState) Run(ctx context.Context, p *Parser[string]) error {
+	switch token := p.Next(ctx); token.Type {
 	case wordType:
 		p.Node(token.Value)
 		p.PushState(w)
 		return nil
-	case TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return nil
 	default:
 		panic("unknown type")
@@ -47,14 +48,14 @@ var (
 
 type lexErrState struct{}
 
-func (e *lexErrState) Run(context.Context, *Lexer) (LexState, error) {
+func (e *lexErrState) Run(context.Context, *lexer.CustomLexer) (lexer.LexState, error) {
 	return nil, errState
 }
 
 type parseErrState struct{}
 
-func (e *parseErrState) Run(_ context.Context, p *Parser[string]) error {
-	_ = p.Next()
+func (e *parseErrState) Run(ctx context.Context, p *Parser[string]) error {
+	_ = p.Next(ctx)
 	return errParse
 }
 
@@ -64,16 +65,13 @@ func TestLexParse(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
+		r := strings.NewReader("Hello\nWorld!")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tokens := make(chan *Token, 1024)
-		lexer := NewLexer(r, tokens, &lexWordState{})
-		parser := NewParser[string](tokens, &parseWordState{})
-
-		got, err := LexParse(ctx, lexer, parser)
+		lexer := lexer.NewCustomLexer(r, &lexWordState{})
+		got, err := LexParse(ctx, lexer, &parseWordState{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -102,16 +100,13 @@ func TestLexParse(t *testing.T) {
 	t.Run("lexer error", func(t *testing.T) {
 		t.Parallel()
 
-		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
+		r := strings.NewReader("Hello\nWorld!")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tokens := make(chan *Token, 1024)
-		lexer := NewLexer(r, tokens, &lexErrState{})
-		parser := NewParser[string](tokens, &parseErrState{})
-
-		_, got := LexParse(ctx, lexer, parser)
+		lexer := lexer.NewCustomLexer(r, &lexErrState{})
+		_, got := LexParse(ctx, lexer, &parseErrState{})
 		want := errState
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)
@@ -122,16 +117,13 @@ func TestLexParse(t *testing.T) {
 	t.Run("parser error", func(t *testing.T) {
 		t.Parallel()
 
-		r := runeio.NewReader(strings.NewReader("Hello\nWorld!"))
+		r := strings.NewReader("Hello\nWorld!")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tokens := make(chan *Token, 1024)
-		lexer := NewLexer(r, tokens, &lexWordState{})
-		parser := NewParser[string](tokens, &parseErrState{})
-
-		_, got := LexParse(ctx, lexer, parser)
+		lexer := lexer.NewCustomLexer(r, &lexWordState{})
+		_, got := LexParse(ctx, lexer, &parseErrState{})
 		want := errParse
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)

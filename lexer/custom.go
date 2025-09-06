@@ -29,22 +29,6 @@ import (
 // EOF is a rune that indicates that the lexer has finished processing.
 var EOF rune = -1
 
-type Position struct {
-	// Filename is the name of the file being read. It can be empty if the
-	// input is not from a file.
-	Filename string
-
-	// Offset is the byte offset in the input stream, starting at 0.
-	Offset int
-
-	// Line is the line number in the input stream, starting at 1.
-	Line int
-
-	// Column is the column number in the line, starting at 1. It counts
-	// characters in the line, including whitespace and newlines.
-	Column int
-}
-
 // LexState is the state of the current lexing state machine. It defines the logic
 // to process the current state and returns the next state.
 type LexState interface {
@@ -71,10 +55,10 @@ func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexStat
 	return &lexFnState{f}
 }
 
-// Lexer lexically processes a byte stream. It is implemented as a finite-state
-// machine in which each [LexState] implements it's own processing.
+// CustomLexer lexically processes a byte stream. It is implemented as a
+// finite-state machine in which each [LexState] implements it's own processing.
 //
-// A Lexer maintains an internal cursor which marks the start of the next
+// A CustomLexer maintains an internal cursor which marks the start of the next
 // token being currently processed. The Lexer can then advance the reader to
 // find the end of the token before emitting it.
 type CustomLexer struct {
@@ -177,18 +161,27 @@ func (l *CustomLexer) NextRune() rune {
 // NextToken implements [Lexer.NextToken] and returns the next token from the
 // input stream. If the end of the input is reached, a token with type
 // [TokenTypeEOF] is returned.
-func (l *CustomLexer) NextToken(ctx context.Context) Token {
+func (l *CustomLexer) NextToken(ctx context.Context) *Token {
 	if l.err != nil {
-		return *l.newToken(TokenTypeEOF)
+		return l.newToken(TokenTypeEOF)
 	}
 
 	// If we have no tokens to return, we need to run the current state.
 	for len(l.buf) == 0 && l.state != nil {
+		// Return EOF if the context is done/canceled. Don't rely on l.state.Run
+		// implementation to check the context.
+		select {
+		case <-ctx.Done():
+			l.setErr(ctx.Err())
+			return l.newToken(TokenTypeEOF)
+		default:
+		}
+
 		var err error
 		l.state, err = l.state.Run(ctx, l)
 		l.setErr(err)
 		if l.err != nil {
-			return *l.newToken(TokenTypeEOF)
+			return l.newToken(TokenTypeEOF)
 		}
 	}
 
@@ -198,13 +191,13 @@ func (l *CustomLexer) NextToken(ctx context.Context) Token {
 		if token.Type != TokenTypeEOF {
 			l.buf = l.buf[1:]
 		}
-		return *token
+		return token
 	}
 
 	// The state is nil and we have no tokens to return, so we are at the end
 	// of the input.
 	l.err = io.EOF
-	return *l.newToken(TokenTypeEOF)
+	return l.newToken(TokenTypeEOF)
 }
 
 // Peek returns the next rune from the buffer without advancing the reader or
