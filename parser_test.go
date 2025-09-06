@@ -18,9 +18,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ianlewis/runeio"
+
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 func newTree[V comparable](n ...*Node[V]) *Node[V] {
@@ -40,34 +42,42 @@ func addParent[V comparable](n *Node[V]) *Node[V] {
 	return n
 }
 
-// testLexer creates and returns a lexer.
-func testLexer(t *testing.T, input string) <-chan *Token {
-	t.Helper()
+const (
+	wordType lexer.TokenType = iota + 1
+)
 
-	// Run the lexer filling the channel buffer. Test input should not exceed this buffer.
-	tokens := make(chan *Token, 1024)
-	l := NewLexer(runeio.NewReader(strings.NewReader(input)), tokens, &lexWordState{})
+type lexWordState struct{}
 
-	if err := l.Lex(context.Background()); err != nil {
-		panic(err)
+func (w *lexWordState) Run(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
+	rn := l.Peek()
+	if unicode.IsSpace(rn) || rn == lexer.EOF {
+		// NOTE: This can emit empty words.
+		l.Emit(wordType)
+		// Discard the space
+		if !l.Discard() {
+			return nil, nil
+		}
 	}
 
-	return tokens
+	l.Advance()
+
+	return w, nil
 }
 
 // testParse creates and runs a lexer, and returns the root of the parse tree.
 func testParse(t *testing.T, input string) (*Node[string], error) {
 	t.Helper()
 
-	tokens := testLexer(t, input)
+	l := lexer.NewCustomLexer(strings.NewReader(input), &lexWordState{})
+	ctx := context.Background()
 
-	p := NewParser[string](tokens, ParseStateFn(func(_ context.Context, p *Parser[string]) error {
+	p := NewParser(l, ParseStateFn(func(_ context.Context, p *Parser[string]) error {
 		for {
-			token := p.Next()
+			token := p.Next(ctx)
 			switch token.Type {
 			case wordType:
 				// OK
-			case TokenTypeEOF:
+			case lexer.TokenTypeEOF:
 				return nil
 			default:
 				panic("unknown type")
@@ -162,61 +172,71 @@ func TestParser_NextPeek(t *testing.T) {
 	t.Parallel()
 
 	input := "A B C"
-	tokens := testLexer(t, input)
+	l := lexer.NewCustomLexer(strings.NewReader(input), &lexWordState{})
 
-	p := NewParser[string](tokens, nil)
+	p := NewParser[string](l, nil)
+
+	ctx := context.Background()
 
 	// expect to read the first token "A"
-	tokenA := p.Next()
-	wanttokenA := &Token{
-		Type:   wordType,
-		Value:  "A",
-		Pos:    0,
-		Line:   1,
-		Column: 1,
+	tokenA := p.Next(ctx)
+	wanttokenA := &lexer.Token{
+		Type:  wordType,
+		Value: "A",
+		Pos: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
 	}
 	if diff := cmp.Diff(wanttokenA, tokenA); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
-	peekTokenB := p.Peek()
-	wantTokenB := &Token{
-		Type:   wordType,
-		Value:  "B",
-		Pos:    2,
-		Line:   1,
-		Column: 3,
+	peekTokenB := p.Peek(ctx)
+	wantTokenB := &lexer.Token{
+		Type:  wordType,
+		Value: "B",
+		Pos: lexer.Position{
+			Offset: 2,
+			Line:   1,
+			Column: 3,
+		},
 	}
 	if diff := cmp.Diff(wantTokenB, peekTokenB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
 	// expect to read the second token "B" because it was not consumed
-	tokenB := p.Next()
+	tokenB := p.Next(ctx)
 	if diff := cmp.Diff(wantTokenB, tokenB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
-	tokenC := p.Next()
-	wantTokenC := &Token{
-		Type:   wordType,
-		Value:  "C",
-		Pos:    4,
-		Line:   1,
-		Column: 5,
+	tokenC := p.Next(ctx)
+	wantTokenC := &lexer.Token{
+		Type:  wordType,
+		Value: "C",
+		Pos: lexer.Position{
+			Offset: 4,
+			Line:   1,
+			Column: 5,
+		},
 	}
 	if diff := cmp.Diff(wantTokenC, tokenC); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
 	// expected end of tokens
-	niltoken := p.Next()
-	tokenEOF := &Token{
-		Type:   TokenTypeEOF,
-		Value:  "",
-		Pos:    5,
-		Line:   1,
-		Column: 6,
+	niltoken := p.Next(ctx)
+	tokenEOF := &lexer.Token{
+		Type:  lexer.TokenTypeEOF,
+		Value: "",
+		Pos: lexer.Position{
+			Offset: 5,
+			Line:   1,
+			Column: 6,
+		},
 	}
 	if diff := cmp.Diff(tokenEOF, niltoken); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)

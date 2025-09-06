@@ -26,13 +26,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ianlewis/runeio"
-
 	"github.com/ianlewis/lexparse"
+	"github.com/ianlewis/lexparse/lexer"
 )
 
 const (
-	lexTypeText lexparse.TokenType = iota
+	lexTypeText lexer.TokenType = iota
 	lexTypeBlockStart
 	lexTypeBlockEnd
 	lexTypeVarStart
@@ -86,12 +85,12 @@ type tmplNode struct {
 	text    string
 }
 
-func lexTokenErr(err error, t *lexparse.Token) error {
-	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Line, t.Column)
+func lexTokenErr(err error, t *lexer.Token) error {
+	return fmt.Errorf("%w: %s", err, t)
 }
 
 // lexText tokenizes normal text.
-func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		p := l.PeekN(2)
 		switch string(p) {
@@ -99,7 +98,7 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 			if l.Width() > 0 {
 				l.Emit(lexTypeText)
 			}
-			return lexparse.LexStateFn(lexCode), nil
+			return lexer.LexStateFn(lexCode), nil
 		default:
 		}
 
@@ -115,7 +114,7 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 }
 
 // lexCode tokenizes template code.
-func lexCode(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexCode(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	// Consume whitespace and discard it.
 	// TODO(#94): use backtracking
 	for {
@@ -131,20 +130,21 @@ func lexCode(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 	rn := l.Peek()
 	switch {
 	case idenRegexp.MatchString(string(rn)):
-		return lexparse.LexStateFn(lexIden), nil
+		return lexer.LexStateFn(lexIden), nil
 	case symbolRegexp.MatchString(string(rn)):
-		return lexparse.LexStateFn(lexSymbol), nil
+		return lexer.LexStateFn(lexSymbol), nil
 	default:
-		return nil, fmt.Errorf("code: %w: %q; line: %d, column: %d", errRune, rn, l.Line(), l.Column())
+		return nil, fmt.Errorf("code: %w: %q; line: %d, column: %d", errRune,
+			rn, l.Pos().Line, l.Pos().Column)
 	}
 }
 
 // lexIden tokenizes identifiers (e.g. variable names).
-func lexIden(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexIden(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		if rn := l.Peek(); !idenRegexp.MatchString(string(rn)) {
 			l.Emit(lexTypeIdentifier)
-			return lexparse.LexStateFn(lexCode), nil
+			return lexer.LexStateFn(lexCode), nil
 		}
 
 		if !l.Advance() {
@@ -154,24 +154,25 @@ func lexIden(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 }
 
 // lexSymbol tokenizes template symbols (e.g. {%, {{, }}, %}).
-func lexSymbol(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexSymbol(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		switch l.Token() {
 		case tokenVarStart:
 			l.Emit(lexTypeVarStart)
-			return lexparse.LexStateFn(lexCode), nil
+			return lexer.LexStateFn(lexCode), nil
 		case tokenVarEnd:
 			l.Emit(lexTypeVarEnd)
-			return lexparse.LexStateFn(lexText), nil
+			return lexer.LexStateFn(lexText), nil
 		case tokenBlockStart:
 			l.Emit(lexTypeBlockStart)
-			return lexparse.LexStateFn(lexCode), nil
+			return lexer.LexStateFn(lexCode), nil
 		case tokenBlockEnd:
 			l.Emit(lexTypeBlockEnd)
-			return lexparse.LexStateFn(lexText), nil
+			return lexer.LexStateFn(lexText), nil
 		default:
 			if rn := l.Peek(); !symbolRegexp.MatchString(string(rn)) {
-				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d", errRune, rn, l.Line(), l.Column())
+				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d",
+					errRune, rn, l.Pos().Line, l.Pos().Column)
 			}
 		}
 
@@ -192,8 +193,8 @@ func parseRoot(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseSeq delegates to another parse function based on token type.
-func parseSeq(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	token := p.Peek()
+func parseSeq(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	token := p.Peek(ctx)
 
 	switch token.Type {
 	case lexTypeText:
@@ -208,8 +209,8 @@ func parseSeq(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseText handles normal text.
-func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	token := p.Next()
+func parseText(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	token := p.Next(ctx)
 
 	// Emit a text node.
 	p.Node(&tmplNode{
@@ -224,9 +225,9 @@ func parseText(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseVarStart handles var start (e.g. '{{').
-func parseVarStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+func parseVarStart(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 	// Consume the var start token.
-	_ = p.Next()
+	_ = p.Next(ctx)
 
 	p.PushState(
 		lexparse.ParseStateFn(parseVar),
@@ -237,8 +238,8 @@ func parseVarStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseVar handles replacement variables (e.g. the 'var' in {{ var }}).
-func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
+func parseVar(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeIdentifier:
 		// Validate the variable name.
 		if !idenRegexp.MatchString(token.Value) {
@@ -252,7 +253,7 @@ func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 		})
 
 		return nil
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: parsing variable name", io.ErrUnexpectedEOF)
 	default:
 		return lexTokenErr(errIdentifier, token)
@@ -260,13 +261,13 @@ func parseVar(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseVarEnd handles var end (e.g. '}}').
-func parseVarEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
+func parseVarEnd(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeVarEnd:
 		// Go back to parsing template init state.
 		p.PushState(lexparse.ParseStateFn(parseSeq))
 		return nil
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: unclosed variable, expected %q", io.ErrUnexpectedEOF, tokenVarEnd)
 	default:
 		return fmt.Errorf("%w: expected %q", lexTokenErr(errIdentifier, token), tokenVarEnd)
@@ -274,8 +275,8 @@ func parseVarEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseBranch handles the start if conditional block.
-func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
+func parseBranch(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeIdentifier:
 		if token.Value != tokenIf {
 			return fmt.Errorf("%w: expected %q", errIdentifier, tokenIf)
@@ -302,7 +303,7 @@ func parseBranch(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 		)
 
 		return nil
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenIf)
 	default:
 		return lexTokenErr(errIdentifier, token)
@@ -321,8 +322,8 @@ func parseIf(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseElse handles an else (or endif) block.
-func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	token := p.Peek()
+func parseElse(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	token := p.Peek(ctx)
 
 	switch token.Type {
 	case lexTypeIdentifier:
@@ -330,7 +331,7 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 		if cur := p.Pos(); cur.Value.typ != nodeTypeSeq {
 			return lexTokenErr(errIdentifier, token)
 		}
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: unclosed if block, looking for %q or %q", io.ErrUnexpectedEOF, tokenElse, tokenEndif)
 	default:
 		return lexTokenErr(errIdentifier, token)
@@ -339,7 +340,7 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	switch token.Value {
 	case tokenElse:
 		// Consume the token.
-		_ = p.Next()
+		_ = p.Next(ctx)
 
 		// Climb the tree back to the conditional.
 		p.Climb()
@@ -374,8 +375,8 @@ func parseElse(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseEndif handles either an endif block.
-func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
+func parseEndif(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeIdentifier:
 		if token.Value != tokenEndif {
 			return lexTokenErr(fmt.Errorf("%w: looking for %q", errIdentifier, tokenEndif), token)
@@ -395,7 +396,7 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 			lexparse.ParseStateFn(parseSeq),
 		)
 		return nil
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: looking for %q", io.ErrUnexpectedEOF, tokenEndif)
 	default:
 		return lexTokenErr(errIdentifier, token)
@@ -403,24 +404,24 @@ func parseEndif(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseBlockStart handles the start of a template block '{%'.
-func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
+func parseBlockStart(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 	// Validate the block start token.
-	switch token := p.Next(); token.Type {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeBlockStart:
 		// OK
 		fmt.Fprintln(os.Stderr, token.Value)
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockStart)
 	default:
 		return lexTokenErr(errIdentifier, token)
 	}
 
 	// Validate the command token.
-	token := p.Peek()
+	token := p.Peek(ctx)
 	switch token.Type {
 	case lexTypeIdentifier:
 		// OK
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockStart)
 	default:
 		return fmt.Errorf("%w: expected %q, %q, or %q",
@@ -442,11 +443,11 @@ func parseBlockStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseBlockEnd handles the end of a template block '%}'.
-func parseBlockEnd(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
-	switch token := p.Next(); token.Type {
+func parseBlockEnd(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+	switch token := p.Next(ctx); token.Type {
 	case lexTypeBlockEnd:
 		return nil
-	case lexparse.TokenTypeEOF:
+	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: expected %q", io.ErrUnexpectedEOF, tokenBlockEnd)
 	default:
 		return lexTokenErr(fmt.Errorf("%w: expected %q", errIdentifier, tokenBlockEnd), token)
@@ -523,13 +524,12 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings
 // This example includes some best practices for error handling, such as
 // including line and column numbers in error messages.
 func Example_templateEngine() {
-	tokens := make(chan *lexparse.Token, 1024)
-	r := runeio.NewReader(strings.NewReader(`Hello, {% if subject %}{{ subject }}{% else %}World{% endif %}!`))
+	r := strings.NewReader(`Hello, {% if subject %}{{ subject }}{% else %}World{% endif %}!`)
 
 	t, err := lexparse.LexParse(
 		context.Background(),
-		lexparse.NewLexer(r, tokens, lexparse.LexStateFn(lexText)),
-		lexparse.NewParser(tokens, lexparse.ParseStateFn(parseRoot)),
+		lexer.NewCustomLexer(r, lexer.LexStateFn(lexText)),
+		lexparse.ParseStateFn(parseRoot),
 	)
 	if err != nil {
 		panic(err)
