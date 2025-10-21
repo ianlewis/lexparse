@@ -76,7 +76,7 @@ func TestLexer_Peek(t *testing.T) {
 	}
 
 	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
-		t.Errorf("Pos (-want +got):\n%s", diff)
+		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 }
 

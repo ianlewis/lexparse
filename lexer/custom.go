@@ -427,7 +427,8 @@ func (l *CustomLexer) newToken(typ TokenType) *Token {
 	return &Token{
 		Type:  typ,
 		Value: l.b.String(),
-		Pos:   l.cursor,
+		Start: l.cursor,
+		End:   l.pos,
 	}
 }
 

@@ -75,7 +75,8 @@ func (n *exprNode) precedence() int {
 }
 
 func tokenErr(err error, t *lexer.Token) error {
-	return fmt.Errorf("%w: %q, line %d, column %d", err, t.Value, t.Pos.Line, t.Pos.Column)
+	return fmt.Errorf("%w: %q, line %d, column %d", err,
+		t.Value, t.Start.Line, t.Start.Column)
 }
 
 // lexExpression tokenizes normal text.

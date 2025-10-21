@@ -70,24 +70,37 @@ func TestLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexer := lexer.NewCustomLexer(r, &lexWordState{})
-		got, err := LexParse(ctx, lexer, &parseWordState{})
+		l := lexer.NewCustomLexer(r, &lexWordState{})
+		got, err := LexParse(ctx, l, &parseWordState{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 
-		expectedRoot := newTree(
+		expectedRoot := addParent(
 			&Node[string]{
-				Value:  "Hello",
-				Line:   1,
-				Column: 1,
-				Pos:    0,
-			},
-			&Node[string]{
-				Value:  "World!",
-				Line:   2,
-				Column: 1,
-				Pos:    6,
+				Start: lexer.Position{
+					Offset: 0,
+					Line:   1,
+					Column: 1,
+				},
+				Children: []*Node[string]{
+					{
+						Value: "Hello",
+						Start: lexer.Position{
+							Offset: 0,
+							Line:   1,
+							Column: 1,
+						},
+					},
+					{
+						Value: "World!",
+						Start: lexer.Position{
+							Offset: 6,
+							Line:   2,
+							Column: 1,
+						},
+					},
+				},
 			},
 		)
 
