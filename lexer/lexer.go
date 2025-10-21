@@ -25,9 +25,6 @@ import (
 // TokenType is a user-defined Token type.
 type TokenType int
 
-// TokenTypeEOF indicates an EOF token signaling the end of input.
-var TokenTypeEOF TokenType = -1
-
 type Position struct {
 	// Filename is the name of the file being read. It can be empty if the
 	// input is not from a file.
