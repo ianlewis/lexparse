@@ -19,12 +19,79 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"text/scanner"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/ianlewis/lexparse/lexer"
 )
+
+type parseTokenState struct{}
+
+func (w *parseTokenState) Run(ctx context.Context, p *Parser[string]) error {
+	switch token := p.Next(ctx); token.Type {
+	case scanner.Ident:
+		p.Node(token.Value)
+		p.PushState(w)
+		return nil
+	case lexer.TokenTypeEOF:
+		return nil
+	default:
+		panic("unknown type")
+	}
+}
+
+func TestScannerLexParse(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic", func(t *testing.T) {
+		t.Parallel()
+
+		r := strings.NewReader("Hello\nWorld")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		l := lexer.NewScanningLexer(r)
+		got, err := LexParse(ctx, l, &parseTokenState{})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		expectedRoot := addParent(
+			&Node[string]{
+				Start: lexer.Position{
+					Offset: 0,
+					Line:   1,
+					Column: 1,
+				},
+				Children: []*Node[string]{
+					{
+						Value: "Hello",
+						Start: lexer.Position{
+							Offset: 0,
+							Line:   1,
+							Column: 1,
+						},
+					},
+					{
+						Value: "World",
+						Start: lexer.Position{
+							Offset: 6,
+							Line:   2,
+							Column: 1,
+						},
+					},
+				},
+			},
+		)
+
+		if diff := cmp.Diff(expectedRoot, got); diff != "" {
+			t.Errorf("unexpected output (-want +got):\n%s", diff)
+		}
+	})
+}
 
 type parseWordState struct{}
 
@@ -59,7 +126,7 @@ func (e *parseErrState) Run(ctx context.Context, p *Parser[string]) error {
 	return errParse
 }
 
-func TestLexParse(t *testing.T) {
+func TestCustomLexParse(t *testing.T) {
 	t.Parallel()
 
 	t.Run("basic", func(t *testing.T) {
