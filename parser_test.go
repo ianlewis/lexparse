@@ -25,13 +25,7 @@ import (
 	"github.com/ianlewis/lexparse/lexer"
 )
 
-func newTree[V comparable](n ...*Node[V]) *Node[V] {
-	root := &Node[V]{}
-	root.Children = append(root.Children, n...)
-	return addParent(root)
-}
-
-// addParent sets the parent reference on all children of n.
+// addParent sets the parent reference on all children of `n`.
 func addParent[V comparable](n *Node[V]) *Node[V] {
 	if n != nil {
 		for _, c := range n.Children {
@@ -106,7 +100,13 @@ func TestParser_new(t *testing.T) {
 
 	p := NewParser[string](nil, nil)
 
-	expectedRoot := &Node[string]{}
+	expectedRoot := &Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
+	}
 	if diff := cmp.Diff(expectedRoot, p.root); diff != "" {
 		t.Fatalf("NewParser: p.root (-want, +got): \n%s", diff)
 	}
@@ -128,35 +128,54 @@ func TestParser_parse_op2(t *testing.T) {
 	}
 
 	// Does the tree look as expected?
-	expectedRoot := newTree(&Node[string]{
-		Value:  "push",
-		Line:   1,
-		Column: 1,
-		Pos:    0,
+	expectedRoot := addParent(&Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
 		Children: []*Node[string]{
 			{
-				Value:  "1",
-				Line:   1,
-				Column: 6,
-				Pos:    5,
-			},
-			{
-				Value:  "push",
-				Line:   1,
-				Column: 8,
-				Pos:    7,
+				Value: "push",
+				Start: lexer.Position{
+					Offset: 0,
+					Line:   1,
+					Column: 1,
+				},
 				Children: []*Node[string]{
 					{
-						Value:  "2",
-						Line:   1,
-						Column: 13,
-						Pos:    12,
+						Value: "1",
+						Start: lexer.Position{
+							Offset: 5,
+							Line:   1,
+							Column: 6,
+						},
 					},
 					{
-						Value:  "3",
-						Line:   1,
-						Column: 15,
-						Pos:    14,
+						Value: "push",
+						Start: lexer.Position{
+							Offset: 7,
+							Line:   1,
+							Column: 8,
+						},
+						Children: []*Node[string]{
+							{
+								Value: "2",
+								Start: lexer.Position{
+									Offset: 12,
+									Line:   1,
+									Column: 13,
+								},
+							},
+							{
+								Value: "3",
+								Start: lexer.Position{
+									Offset: 14,
+									Line:   1,
+									Column: 15,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -178,15 +197,20 @@ func TestParser_NextPeek(t *testing.T) {
 
 	ctx := context.Background()
 
-	// expect to read the first token "A"
+	// Expect to read the first token `A`
 	tokenA := p.Next(ctx)
 	wanttokenA := &lexer.Token{
 		Type:  wordType,
 		Value: "A",
-		Pos: lexer.Position{
+		Start: lexer.Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
+		},
+		End: lexer.Position{
+			Offset: 1,
+			Line:   1,
+			Column: 2,
 		},
 	}
 	if diff := cmp.Diff(wanttokenA, tokenA); diff != "" {
@@ -197,17 +221,22 @@ func TestParser_NextPeek(t *testing.T) {
 	wantTokenB := &lexer.Token{
 		Type:  wordType,
 		Value: "B",
-		Pos: lexer.Position{
+		Start: lexer.Position{
 			Offset: 2,
 			Line:   1,
 			Column: 3,
+		},
+		End: lexer.Position{
+			Offset: 3,
+			Line:   1,
+			Column: 4,
 		},
 	}
 	if diff := cmp.Diff(wantTokenB, peekTokenB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
-	// expect to read the second token "B" because it was not consumed
+	// Expect to read the second token "B" because it was not consumed
 	tokenB := p.Next(ctx)
 	if diff := cmp.Diff(wantTokenB, tokenB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
@@ -217,22 +246,32 @@ func TestParser_NextPeek(t *testing.T) {
 	wantTokenC := &lexer.Token{
 		Type:  wordType,
 		Value: "C",
-		Pos: lexer.Position{
+		Start: lexer.Position{
 			Offset: 4,
 			Line:   1,
 			Column: 5,
+		},
+		End: lexer.Position{
+			Offset: 5,
+			Line:   1,
+			Column: 6,
 		},
 	}
 	if diff := cmp.Diff(wantTokenC, tokenC); diff != "" {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
-	// expected end of tokens
+	// The expected end of tokens
 	niltoken := p.Next(ctx)
 	tokenEOF := &lexer.Token{
 		Type:  lexer.TokenTypeEOF,
 		Value: "",
-		Pos: lexer.Position{
+		Start: lexer.Position{
+			Offset: 5,
+			Line:   1,
+			Column: 6,
+		},
+		End: lexer.Position{
 			Offset: 5,
 			Line:   1,
 			Column: 6,
@@ -249,11 +288,18 @@ func TestParser_Node(t *testing.T) {
 	p := NewParser[string](nil, nil)
 
 	child1 := p.Node("A")
-	expectedRootA := newTree(
-		&Node[string]{
-			Value: "A",
+	expectedRootA := addParent(&Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		},
-	)
+		Children: []*Node[string]{
+			{
+				Value: "A",
+			},
+		},
+	})
 
 	if diff := cmp.Diff(expectedRootA.Children[0], child1); diff != "" {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
@@ -264,14 +310,21 @@ func TestParser_Node(t *testing.T) {
 	}
 
 	child2 := p.Node("B")
-	expectedRootB := newTree(
-		&Node[string]{
-			Value: "A",
+	expectedRootB := addParent(&Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		},
-		&Node[string]{
-			Value: "B",
+		Children: []*Node[string]{
+			{
+				Value: "A",
+			},
+			{
+				Value: "B",
+			},
 		},
-	)
+	})
 
 	if diff := cmp.Diff(expectedRootB.Children[1], child2); diff != "" {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
@@ -291,12 +344,21 @@ func TestParser_ClimbPos(t *testing.T) {
 
 	p := NewParser[string](nil, nil)
 
-	p.root = newTree(
+	p.root = addParent(
 		&Node[string]{
-			Value: "A",
+			Start: lexer.Position{
+				Offset: 0,
+				Line:   1,
+				Column: 1,
+			},
 			Children: []*Node[string]{
 				{
-					Value: "B",
+					Value: "A",
+					Children: []*Node[string]{
+						{
+							Value: "B",
+						},
+					},
 				},
 			},
 		},
@@ -350,11 +412,18 @@ func TestParser_Push(t *testing.T) {
 	p := NewParser[string](nil, nil)
 
 	valA := "A"
-	expectedRootA := newTree(
-		&Node[string]{
-			Value: valA,
+	expectedRootA := addParent(&Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
 		},
-	)
+		Children: []*Node[string]{
+			{
+				Value: valA,
+			},
+		},
+	})
 	if diff := cmp.Diff(expectedRootA.Children[0], p.Push(valA)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valA, diff)
 	}
@@ -366,16 +435,23 @@ func TestParser_Push(t *testing.T) {
 	}
 
 	valB := "B"
-	expectedRootB := newTree(
-		&Node[string]{
-			Value: "A",
-			Children: []*Node[string]{
-				{
-					Value: "B",
+	expectedRootB := addParent(&Node[string]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
+		Children: []*Node[string]{
+			{
+				Value: "A",
+				Children: []*Node[string]{
+					{
+						Value: "B",
+					},
 				},
 			},
 		},
-	)
+	})
 	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], p.Push(valB)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valB, diff)
 	}
@@ -392,16 +468,19 @@ func TestParser_Replace(t *testing.T) {
 
 	p := NewParser[string](nil, nil)
 
-	p.root = newTree(
-		&Node[string]{
-			Value: "A",
-			Children: []*Node[string]{
-				{
-					Value: "B",
+	p.root = addParent(&Node[string]{
+		Children: []*Node[string]{
+			{
+				Value: "A",
+				Children: []*Node[string]{
+					{
+						Value: "B",
+					},
 				},
 			},
 		},
-	)
+	})
+
 	// Current node is Node A
 	p.node = p.root.Children[0]
 
@@ -411,17 +490,20 @@ func TestParser_Replace(t *testing.T) {
 		t.Errorf("Replace(%q): (-want, +got): \n%s", valC, diff)
 	}
 
-	expectedRoot := newTree(
-		&Node[string]{
-			Value: "C",
-			Children: []*Node[string]{
-				{
-					Value: "B",
+	expectedRoot := addParent(&Node[string]{
+		Children: []*Node[string]{
+			{
+				Value: "C",
+				Children: []*Node[string]{
+					{
+						Value: "B",
+					},
 				},
 			},
 		},
-	)
-	// Current node is set to Node C.
+	})
+
+	// Current node is set to Node `C`.
 	if diff := cmp.Diff(expectedRoot.Children[0], p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}

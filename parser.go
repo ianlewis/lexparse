@@ -28,14 +28,8 @@ type Node[V comparable] struct {
 	Children []*Node[V]
 	Value    V
 
-	// Pos is the position in the input where the value was found.
-	Pos int
-
-	// Line is the line number in the input where the value was found.
-	Line int
-
-	// Column is the column in the line of the input where the value was found.
-	Column int
+	// Start is the start position in the input where the value was found.
+	Start lexer.Position
 }
 
 // ParseState is the state of the current parsing state machine. It defines the logic
@@ -90,7 +84,13 @@ type TokenSource interface {
 // NewParser creates a new Parser that reads from the tokens channel. The
 // parser is initialized with a root node with an empty value.
 func NewParser[V comparable](tokens TokenSource, startingState ParseState[V]) *Parser[V] {
-	root := &Node[V]{}
+	root := &Node[V]{
+		Start: lexer.Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
+	}
 	p := &Parser[V]{
 		stateStack: &stack[V]{},
 		tokens:     tokens,
@@ -144,9 +144,10 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 		select {
 		case <-ctx.Done():
 			if err := ctx.Err(); err != nil {
-				return p.Root(), err
+				//nolint:wrapcheck // no additional error context for error.
+				return p.root, err
 			}
-			return p.Root(), nil
+			return p.root, nil
 		default:
 		}
 
@@ -159,7 +160,8 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 			return p.Root(), err
 		}
 	}
-	return p.Root(), nil
+
+	return p.root, nil
 }
 
 // PushState pushes a number of new expected future states onto the state stack
@@ -225,24 +227,21 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 // NewNode creates a new node at the current token position and returns it
 // without adding it to the tree.
 func (p *Parser[V]) NewNode(v V) *Node[V] {
-	var pos, line, col int
+	var start lexer.Position
 	if p.token != nil {
-		pos = p.token.Pos.Offset
-		line = p.token.Pos.Line
-		col = p.token.Pos.Column
+		start = p.token.Start
 	}
 
 	return &Node[V]{
-		Value:  v,
-		Pos:    pos,
-		Line:   line,
-		Column: col,
+		Value: v,
+		Start: start,
 	}
 }
 
 // Climb updates the current node position to the current node's parent
 // returning the previous current node. It is a no-op that returns the root
-// node if called on the root node.
+// node if called on the root node. Updates the end position of the parent node
+// to the end position of the current node.
 func (p *Parser[V]) Climb() *Node[V] {
 	n := p.node
 	if p.node.Parent != nil {

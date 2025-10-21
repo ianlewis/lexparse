@@ -60,8 +60,11 @@ type Token struct {
 	// Value is the Token's value.
 	Value string
 
-	// Pos is the position in the byte stream where the Token was found.
-	Pos Position
+	// Start is the start position in the byte stream where the Token was found.
+	Start Position
+
+	// End is the end position in the byte stream where the Token was found.
+	End Position
 }
 
 // String returns a string representation of the Token.
@@ -70,7 +73,7 @@ func (t Token) String() string {
 	if t.Type == TokenTypeEOF {
 		value = "<EOF>"
 	}
-	return fmt.Sprintf("%s: %s", t.Pos, value)
+	return fmt.Sprintf("%s:%s %s", t.Start, t.End, value)
 }
 
 // Lexer is an interface that defines the methods for a lexer that tokenizes
