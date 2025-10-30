@@ -44,7 +44,7 @@ API. The lexing API handles separating input into tokens.
 
 The `Lexer` interface represents a [lexical
 analyzer](https://en.wikipedia.org/wiki/Lexical_analysis) and operates on a
-buffered stream of text and outputs tokens which consist of a lexeme (the text)
+buffered stream of text and outputs tokens which consist of a value (the text)
 and a type. It defines a `NextToken` method for retrieving the next token from
 the input stream, and an `Err` method for retrieving errors.
 
