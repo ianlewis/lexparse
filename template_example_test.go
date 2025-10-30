@@ -117,7 +117,7 @@ func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 func lexCode(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	// Consume whitespace and discard it.
 	// TODO(#94): use backtracking
-	for !unicode.IsSpace(l.Peek()) {
+	for unicode.IsSpace(l.Peek()) {
 		if !l.Discard() {
 			// End of input
 			return nil, nil
