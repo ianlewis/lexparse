@@ -27,7 +27,7 @@ import (
 
 // channelBufSize is the size of the buffer for the token channel used between
 // the lexer and parser.
-var channelBufSize = 1024
+const channelBufSize = 1024
 
 // tokenChan implements the [lexer.TokenSource] interface by reading tokens from
 // a channel.
@@ -55,13 +55,13 @@ func (tc *tokenChan) NextToken(ctx context.Context) *lexer.Token {
 // is returned.
 func LexParse[V comparable](
 	ctx context.Context,
-	l lexer.Lexer,
+	lex lexer.Lexer,
 	startingState ParseState[V],
 ) (*Node[V], error) {
 	var root *Node[V]
 	var lexErr error
 	var parseErr error
-	var wg sync.WaitGroup
+	var waitGrp sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 
 	tokens := &tokenChan{
@@ -71,25 +71,25 @@ func LexParse[V comparable](
 
 	p := NewParser(tokens, startingState)
 
-	wg.Add(1)
+	waitGrp.Add(1)
 	go func() {
 		t := &lexer.Token{}
 		for t.Type != lexer.TokenTypeEOF {
-			t = l.NextToken(ctx)
+			t = lex.NextToken(ctx)
 			tokens.c <- t
 		}
-		lexErr = l.Err()
-		wg.Done()
+		lexErr = lex.Err()
+		waitGrp.Done()
 	}()
 
-	wg.Add(1)
+	waitGrp.Add(1)
 	go func() {
 		root, parseErr = p.Parse(ctx)
 		cancel() // Indicate that parsing is done.
-		wg.Done()
+		waitGrp.Done()
 	}()
 
-	wg.Wait()
+	waitGrp.Wait()
 
 	err := lexErr
 	// Do not report context.Canceled errors from the Lexer. If the context is

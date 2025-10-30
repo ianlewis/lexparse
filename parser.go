@@ -39,7 +39,7 @@ type ParseState[V comparable] interface {
 	// encountered. Implementations are expected to add new [Node] objects to
 	// the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
 	// state should be pushed onto the stack as needed using [Parser.PushState].
-	Run(context.Context, *Parser[V]) error
+	Run(ctx context.Context, p *Parser[V]) error
 }
 
 type parseFnState[V comparable] struct {
@@ -79,7 +79,7 @@ func (s *stack[V]) pop() ParseState[V] {
 type TokenSource interface {
 	// NextToken returns the next token from the source. When tokens are
 	// exhausted, it returns a Token with Type set to [lexer.TokenTypeEOF].
-	NextToken(context.Context) *lexer.Token
+	NextToken(ctx context.Context) *lexer.Token
 }
 
 // NewParser creates a new Parser that reads from the tokens channel. The
@@ -254,36 +254,38 @@ func (p *Parser[V]) Climb() *Node[V] {
 // Replace replaces the current node with a new node with the given value. The
 // old node is removed from the tree and it's value is returned. Can be used to
 // replace the root node.
+//
+//nolint:ireturn // returning the generic interface is needed to return the previous value.
 func (p *Parser[V]) Replace(v V) V {
-	n := p.NewNode(v)
+	node := p.NewNode(v)
 
 	// Replace the parent.
-	n.Parent = p.node.Parent
-	if n.Parent != nil {
-		for i := range n.Parent.Children {
-			if n.Parent.Children[i] == p.node {
-				n.Parent.Children[i] = n
+	node.Parent = p.node.Parent
+	if node.Parent != nil {
+		for i := range node.Parent.Children {
+			if node.Parent.Children[i] == p.node {
+				node.Parent.Children[i] = node
 				break
 			}
 		}
 	}
 
-	// Replace children. Preserve nil,non-nil slice.
+	// Replace children. Preserve nil, non-nil slice.
 	if p.node.Children != nil {
-		n.Children = make([]*Node[V], len(p.node.Children))
+		node.Children = make([]*Node[V], len(p.node.Children))
 		for i := range p.node.Children {
-			n.Children[i] = p.node.Children[i]
-			n.Children[i].Parent = n
+			node.Children[i] = p.node.Children[i]
+			node.Children[i].Parent = node
 		}
 	}
 
 	// If we are currently at the root, replace the root reference as well.
 	if p.node == p.root {
-		p.root = n
+		p.root = node
 	}
 
 	oldVal := p.node.Value
-	p.node = n
+	p.node = node
 
 	return oldVal
 }

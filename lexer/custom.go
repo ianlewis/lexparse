@@ -27,31 +27,31 @@ import (
 )
 
 // EOF is a rune that indicates that the lexer has finished processing.
-var EOF rune = -1
+const EOF rune = -1
 
 // LexState is the state of the current lexing state machine. It defines the logic
 // to process the current state and returns the next state.
 type LexState interface {
 	// Run returns the next state to transition to or an error. If the returned
-	// next state is nil or the returned error is io.EOF then the Lexer
-	// finishes processing normally.
-	Run(context.Context, *CustomLexer) (LexState, error)
+	// error is io.EOF then the Lexer finishes processing normally.
+	Run(ctx context.Context, l *CustomLexer) (LexState, error)
 }
 
 type lexFnState struct {
 	f func(context.Context, *CustomLexer) (LexState, error)
 }
 
-// Run implements LexState.Run.
-func (s *lexFnState) Run(ctx context.Context, l *CustomLexer) (LexState, error) {
-	if s.f == nil {
-		return nil, nil
-	}
+// Run implements [LexState.Run].
+//
+//nolint:lll // nolintlint is broken here so we add nolint on the same line.
+func (s *lexFnState) Run(ctx context.Context, l *CustomLexer) (LexState, error) { //nolint:ireturn // returning interface is required to satisfy LexState.
 	return s.f(ctx, l)
 }
 
 // LexStateFn creates a State from the given Run function.
-func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexState {
+//
+//nolint:lll // nolintlint is broken here so we add nolint on the same line.
+func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexState { //nolint:ireturn // returning interface is required to satisfy LexState.
 	return &lexFnState{f}
 }
 
@@ -88,7 +88,7 @@ type CustomLexer struct {
 // [LexState]. The Lexer takes ownership of the tokens channel and closes it
 // when lexing is completed.
 func NewCustomLexer(r io.Reader, startingState LexState) *CustomLexer {
-	l := &CustomLexer{
+	customLexer := &CustomLexer{
 		state: startingState,
 		pos: Position{
 			Offset: 0,
@@ -108,9 +108,9 @@ func NewCustomLexer(r io.Reader, startingState LexState) *CustomLexer {
 		br = bufio.NewReader(r)
 	}
 
-	l.r = runeio.NewReader(br)
+	customLexer.r = runeio.NewReader(br)
 
-	return l
+	return customLexer
 }
 
 // Pos returns the current position of the underlying reader.
@@ -245,9 +245,9 @@ func (l *CustomLexer) DiscardN(n int) int {
 	return l.advance(n, true)
 }
 
-// advance attempts to advance the reader n runes. If discard is true the token
+// advance attempts to advance the reader numRunes runes. If discard is true the token
 // cursor position is updated as well.
-func (l *CustomLexer) advance(n int, discard bool) int {
+func (l *CustomLexer) advance(numRunes int, discard bool) int {
 	if l.err != nil {
 		return 0
 	}
@@ -260,35 +260,35 @@ func (l *CustomLexer) advance(n int, discard bool) int {
 	// directly to the buffer's memory.
 	// Minimum size the buffer of underlying reader could be expected to be.
 	minSize := 16
-	for n > 0 {
+	for numRunes > 0 {
 		// Determine the number of runes to read.
 		toRead := l.r.Buffered()
-		if n < toRead {
-			toRead = n
+		if numRunes < toRead {
+			toRead = numRunes
 		}
 		if toRead == 0 {
-			if minSize < n {
+			if minSize < numRunes {
 				toRead = minSize
 			} else {
-				toRead = n
+				toRead = numRunes
 			}
 		}
 		// Peek at input so we can increment position, line, column counters.
-		rn, err := l.r.Peek(toRead)
+		peekedRunes, err := l.r.Peek(toRead)
 		if err != nil && !errors.Is(err, io.EOF) {
 			l.setErr(fmt.Errorf("peeking input: %w", err))
 			return advanced
 		}
 		// Advance by peeked amount.
-		d, dErr := l.r.Discard(len(rn))
-		advanced += d
-		l.pos.Offset += d
+		numDiscarded, dErr := l.r.Discard(len(peekedRunes))
+		advanced += numDiscarded
+		l.pos.Offset += numDiscarded
 		// NOTE: We must be careful since toRead could be different from # of
 		// runes peeked and/or discarded. We will only actually advance by the
 		// number of runes discarded in the underlying reader to maintain
 		// consistency.
-		for i := 0; i < d; i++ {
-			if rn[i] == '\n' {
+		for i := range numDiscarded {
+			if peekedRunes[i] == '\n' {
 				l.pos.Line++
 				l.pos.Column = 1
 			} else {
@@ -296,7 +296,7 @@ func (l *CustomLexer) advance(n int, discard bool) int {
 			}
 		}
 		if !discard {
-			l.b.WriteString(string(rn))
+			l.b.WriteString(string(peekedRunes))
 		}
 		if dErr != nil {
 			l.setErr(fmt.Errorf("discarding input: %w", err))
@@ -307,7 +307,7 @@ func (l *CustomLexer) advance(n int, discard bool) int {
 			l.setErr(err)
 			return advanced
 		}
-		n -= d
+		numRunes -= numDiscarded
 	}
 	return advanced
 }
@@ -316,11 +316,11 @@ func (l *CustomLexer) advance(n int, discard bool) int {
 // reader, and stopping when one of the strings is found. The token cursor is
 // not advanced. The string found is returned. If no match is found an empty
 // string is returned.
-func (l *CustomLexer) Find(q []string) string {
+func (l *CustomLexer) Find(query []string) string {
 	var maxLen int
-	for i := range q {
-		if len(q[i]) > maxLen {
-			maxLen = len(q[i])
+	for i := range query {
+		if len(query[i]) > maxLen {
+			maxLen = len(query[i])
 		}
 	}
 
@@ -337,9 +337,9 @@ func (l *CustomLexer) Find(q []string) string {
 			return ""
 		}
 
-		for j := range q {
-			if strings.HasPrefix(string(rns), q[j]) {
-				return q[j]
+		for j := range query {
+			if strings.HasPrefix(string(rns), query[j]) {
+				return query[j]
 			}
 		}
 
@@ -347,15 +347,15 @@ func (l *CustomLexer) Find(q []string) string {
 	}
 }
 
-// DiscardTo searches the input for one of the given search strings, advancing the
-// reader, and stopping when one of the strings is found. The token cursor is
-// advanced and data prior to the search string is discarded. The string found is
-// returned. If no match is found an empty string is returned.
-func (l *CustomLexer) DiscardTo(q []string) string {
+// DiscardTo searches the input for one of the given search strings, advancing
+// the reader, and stopping when one of the strings is found. The token cursor
+// is advanced and data prior to the search string is discarded. The string
+// found is returned. If no match is found an empty string is returned.
+func (l *CustomLexer) DiscardTo(query []string) string {
 	var maxLen int
-	for i := range q {
-		if len(q[i]) > maxLen {
-			maxLen = len(q[i])
+	for i := range query {
+		if len(query[i]) > maxLen {
+			maxLen = len(query[i])
 		}
 	}
 
@@ -371,16 +371,16 @@ func (l *CustomLexer) DiscardTo(q []string) string {
 
 		// TODO(#94): use backtracking
 		rns := l.PeekN(bufS)
-		for i := 0; i < len(rns)-maxLen+1; i++ {
-			for j := range q {
-				if strings.HasPrefix(string(rns[i:i+maxLen]), q[j]) {
+		for i := range len(rns) - maxLen + 1 {
+			for j := range query {
+				if strings.HasPrefix(string(rns[i:i+maxLen]), query[j]) {
 					// We have found a match. Discard prior runes and return.
 					if n := l.advance(i, true); n < i {
 						// We should have been able to advance by this amount.
 						// An error has likely occurred.
 						return ""
 					}
-					return q[j]
+					return query[j]
 				}
 			}
 		}

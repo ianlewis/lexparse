@@ -25,6 +25,7 @@ import (
 // TokenType is a user-defined Token type.
 type TokenType int
 
+// Position represents a position in an input.
 type Position struct {
 	// Filename is the name of the file being read. It can be empty if the
 	// input is not from a file.
@@ -79,7 +80,7 @@ type Lexer interface {
 	// NextToken returns the next token from the input. If there are no more
 	// tokens, the context is canceled, or an error occurs, it returns a Token
 	// with Type set to [TokenTypeEOF].
-	NextToken(context.Context) *Token
+	NextToken(ctx context.Context) *Token
 
 	// Err returns the error encountered by the lexer, if any. If the error
 	// encountered is [io.EOF], it will return nil.

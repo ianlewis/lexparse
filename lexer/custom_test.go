@@ -17,6 +17,7 @@ package lexer
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"unicode"
@@ -30,6 +31,7 @@ const (
 
 type lexWordState struct{}
 
+//nolint:ireturn // returning interface is required to satisfy LexState.
 func (w *lexWordState) Run(_ context.Context, l *CustomLexer) (LexState, error) {
 	rn := l.Peek()
 	if unicode.IsSpace(rn) || rn == EOF {
@@ -37,7 +39,7 @@ func (w *lexWordState) Run(_ context.Context, l *CustomLexer) (LexState, error) 
 		l.Emit(wordType)
 		// Discard the space
 		if !l.Discard() {
-			return nil, nil
+			return nil, io.EOF
 		}
 	}
 
@@ -49,10 +51,10 @@ func (w *lexWordState) Run(_ context.Context, l *CustomLexer) (LexState, error) 
 func TestLexer_Peek(t *testing.T) {
 	t.Parallel()
 
-	l := NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{})
+	customLexer := NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{})
 
-	rn := l.Peek()
-	if err := l.Err(); err != nil {
+	rn := customLexer.Peek()
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := rn, 'H'; got != want {
@@ -65,7 +67,7 @@ func TestLexer_Peek(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
@@ -75,7 +77,7 @@ func TestLexer_Peek(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 }
@@ -83,18 +85,18 @@ func TestLexer_Peek(t *testing.T) {
 func TestLexer_PeekN(t *testing.T) {
 	t.Parallel()
 
-	l := NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{})
+	customLexer := NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{})
 
-	rns := l.PeekN(6)
-	if err := l.Err(); err != nil {
+	rns := customLexer.PeekN(6)
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := string(rns), "Hello\n"; got != want {
 		t.Errorf("Peek: want: %q, got: %q", want, got)
 	}
 
-	rns = l.PeekN(16)
-	if err := l.Err(); err != nil {
+	rns = customLexer.PeekN(16)
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := string(rns), "Hello\nWorld!"; got != want {
@@ -107,7 +109,7 @@ func TestLexer_PeekN(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -117,7 +119,7 @@ func TestLexer_PeekN(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 }
@@ -128,18 +130,18 @@ func TestLexer_Advance(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
 
-		advanced := l.Advance()
-		if err := l.Err(); err != nil {
+		advanced := customLexer.Advance()
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, true; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		rns := l.PeekN(10)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(10)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "ello\n!Adva"; got != want {
@@ -152,7 +154,7 @@ func TestLexer_Advance(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -162,26 +164,27 @@ func TestLexer_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(1, l.Width()); diff != "" {
+		if diff := cmp.Diff(1, customLexer.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("H", l.Token()); diff != "" {
+		if diff := cmp.Diff("H", customLexer.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 	})
 
-	t.Run("failure", func(t *testing.T) {
+	//nolint:dupl // Similar to TestLexer_Discard/end_of_input
+	t.Run("end of input", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader(""), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader(""), &lexWordState{})
 
-		advanced := l.Advance()
-		if err := l.Err(); err != nil {
+		advanced := customLexer.Advance()
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, false; got != want {
@@ -194,7 +197,7 @@ func TestLexer_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -204,15 +207,15 @@ func TestLexer_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -224,18 +227,18 @@ func TestLexer_AdvanceN(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
 
-		advanced := l.AdvanceN(5)
-		if err := l.Err(); err != nil {
+		advanced := customLexer.AdvanceN(5)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, 5; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		rns := l.PeekN(10)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(10)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "\n!Advance!"; got != want {
@@ -248,7 +251,7 @@ func TestLexer_AdvanceN(t *testing.T) {
 			Column: 6,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -258,15 +261,15 @@ func TestLexer_AdvanceN(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 5; got != want {
+		if got, want := customLexer.Width(), 5; got != want {
 			t.Errorf("Width: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Token(), "Hello"; got != want {
+		if got, want := customLexer.Token(), "Hello"; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -274,10 +277,10 @@ func TestLexer_AdvanceN(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
 
-		advanced := l.AdvanceN(16)
-		if err := l.Err(); err != nil {
+		advanced := customLexer.AdvanceN(16)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, 15; got != want {
@@ -290,7 +293,7 @@ func TestLexer_AdvanceN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -300,15 +303,15 @@ func TestLexer_AdvanceN(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 15; got != want {
+		if got, want := customLexer.Width(), 15; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), "Hello\n!Advance!"; got != want {
+		if got, want := customLexer.Token(), "Hello\n!Advance!"; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -320,18 +323,18 @@ func TestLexer_Discard(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{})
 
-		discarded := l.Discard()
-		if err := l.Err(); err != nil {
+		discarded := customLexer.Discard()
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := discarded, true; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
 
-		rns := l.PeekN(10)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(10)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "ello\n!Adva"; got != want {
@@ -344,7 +347,7 @@ func TestLexer_Discard(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -354,26 +357,27 @@ func TestLexer_Discard(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
 
-	t.Run("failure", func(t *testing.T) {
+	//nolint:dupl // Similar to TestLexer_Advance/end_of_input
+	t.Run("end of input", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader(""), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader(""), &lexWordState{})
 
-		discarded := l.Discard()
-		if err := l.Err(); err != nil {
+		discarded := customLexer.Discard()
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := discarded, false; got != want {
@@ -386,7 +390,7 @@ func TestLexer_Discard(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -396,15 +400,15 @@ func TestLexer_Discard(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -416,18 +420,18 @@ func TestLexer_DiscardN(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{})
 
-		discarded := l.DiscardN(7)
-		if err := l.Err(); err != nil {
+		discarded := customLexer.DiscardN(7)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := discarded, 7; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
 
-		rns := l.PeekN(8)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(8)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "Discard!"; got != want {
@@ -440,7 +444,7 @@ func TestLexer_DiscardN(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -450,15 +454,15 @@ func TestLexer_DiscardN(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -466,10 +470,10 @@ func TestLexer_DiscardN(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{})
 
-		discarded := l.DiscardN(16)
-		if err := l.Err(); err != nil {
+		discarded := customLexer.DiscardN(16)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := discarded, 15; got != want {
@@ -482,7 +486,7 @@ func TestLexer_DiscardN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -492,35 +496,36 @@ func TestLexer_DiscardN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
 }
 
+//nolint:dupl // Similar to TestLexer_DiscardTo/match
 func TestLexer_Find_match(t *testing.T) {
 	t.Parallel()
 
-	l := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
+	customLexer := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
 
-	token := l.Find([]string{"Find"})
-	if err := l.Err(); err != nil {
+	token := customLexer.Find([]string{"Find"})
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := token, "Find"; got != want {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
 
-	rns := l.PeekN(5)
-	if err := l.Err(); err != nil {
+	rns := customLexer.PeekN(5)
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
@@ -535,7 +540,7 @@ func TestLexer_Find_match(t *testing.T) {
 		Column: 2,
 	}
 
-	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -545,16 +550,16 @@ func TestLexer_Find_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Width(), 7; got != want {
+	if got, want := customLexer.Width(), 7; got != want {
 		t.Errorf("Width: want: %v, got: %v", want, got)
 	}
 
 	//nolint:goconst // It's easier to understand the test if the string is written out.
-	if got, want := l.Token(), "Hello\n!"; got != want {
+	if got, want := customLexer.Token(), "Hello\n!"; got != want {
 		t.Errorf("Token: want: %q, got: %q", want, got)
 	}
 }
@@ -562,10 +567,10 @@ func TestLexer_Find_match(t *testing.T) {
 func TestLexer_Find_short_match(t *testing.T) {
 	t.Parallel()
 
-	l := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
+	customLexer := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
 
-	token := l.Find([]string{"no match", "Find!"})
-	if err := l.Err(); err != nil {
+	token := customLexer.Find([]string{"no match", "Find!"})
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := token, "Find!"; got != want {
@@ -578,7 +583,7 @@ func TestLexer_Find_short_match(t *testing.T) {
 		Column: 2,
 	}
 
-	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -588,26 +593,27 @@ func TestLexer_Find_short_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Width(), 7; got != want {
+	if got, want := customLexer.Width(), 7; got != want {
 		t.Errorf("Width: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.Token(), "Hello\n!"; got != want {
+	if got, want := customLexer.Token(), "Hello\n!"; got != want {
 		t.Errorf("Token: want: %q, got: %q", want, got)
 	}
 }
 
+//nolint:dupl // Similar to TestLexer_DiscardTo/no_match
 func TestLexer_Find_no_match(t *testing.T) {
 	t.Parallel()
 
-	l := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
+	customLexer := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
 
-	token := l.Find([]string{"no match"})
-	if err := l.Err(); err != nil {
+	token := customLexer.Find([]string{"no match"})
+	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if got, want := token, ""; got != want {
@@ -620,7 +626,7 @@ func TestLexer_Find_no_match(t *testing.T) {
 		Column: 7,
 	}
 
-	if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -630,15 +636,15 @@ func TestLexer_Find_no_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if got, want := l.Width(), 12; got != want {
+	if got, want := customLexer.Width(), 12; got != want {
 		t.Errorf("Width: want: %v, got: %v", want, got)
 	}
 
-	if got, want := l.Token(), "Hello\n!Find!"; got != want {
+	if got, want := customLexer.Token(), "Hello\n!Find!"; got != want {
 		t.Errorf("Token: want: %q, got: %q", want, got)
 	}
 }
@@ -649,18 +655,18 @@ func TestLexer_Ignore(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Ignore!\n"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Ignore!\n"), &lexWordState{})
 
-		advanced := l.AdvanceN(7)
-		if err := l.Err(); err != nil {
+		advanced := customLexer.AdvanceN(7)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, 7; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		rns := l.PeekN(7)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(7)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "Ignore!"; got != want {
@@ -673,7 +679,7 @@ func TestLexer_Ignore(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -683,30 +689,30 @@ func TestLexer_Ignore(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 7; got != want {
+		if got, want := customLexer.Width(), 7; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), "Hello\n!"; got != want {
+		if got, want := customLexer.Token(), "Hello\n!"; got != want {
 			t.Errorf("Token: want: %v, got: %v", want, got)
 		}
 
-		l.Ignore()
+		customLexer.Ignore()
 
-		advanced = l.AdvanceN(7)
-		if err := l.Err(); err != nil {
+		advanced = customLexer.AdvanceN(7)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := advanced, 7; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
 
-		rns = l.PeekN(1)
-		if err := l.Err(); err != nil {
+		rns = customLexer.PeekN(1)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "\n"; got != want {
@@ -719,7 +725,7 @@ func TestLexer_Ignore(t *testing.T) {
 			Column: 9,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -729,15 +735,15 @@ func TestLexer_Ignore(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 7; got != want {
+		if got, want := customLexer.Width(), 7; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), "Ignore!"; got != want {
+		if got, want := customLexer.Token(), "Ignore!"; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
@@ -746,21 +752,22 @@ func TestLexer_Ignore(t *testing.T) {
 func TestLexer_DiscardTo(t *testing.T) {
 	t.Parallel()
 
+	//nolint:dupl // Similar to TestLexer_Find_match
 	t.Run("match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
 
-		token := l.DiscardTo([]string{"Find"})
-		if err := l.Err(); err != nil {
+		token := customLexer.DiscardTo([]string{"Find"})
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := token, "Find"; got != want {
 			t.Errorf("unexpected token: want: %q, got: %q", want, got)
 		}
 
-		rns := l.PeekN(5)
-		if err := l.Err(); err != nil {
+		rns := customLexer.PeekN(5)
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := string(rns), "Find!"; got != want {
@@ -773,7 +780,7 @@ func TestLexer_DiscardTo(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -783,26 +790,27 @@ func TestLexer_DiscardTo(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %q, got: %q", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})
 
+	//nolint:dupl // Similar to TestLexer_Find_no_match
 	t.Run("no match", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
+		customLexer := NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{})
 
-		token := l.DiscardTo([]string{"no match"})
-		if err := l.Err(); err != nil {
+		token := customLexer.DiscardTo([]string{"no match"})
+		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		if got, want := token, ""; got != want {
@@ -815,7 +823,7 @@ func TestLexer_DiscardTo(t *testing.T) {
 			Column: 7,
 		}
 
-		if diff := cmp.Diff(expectedPos, l.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, customLexer.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -825,15 +833,15 @@ func TestLexer_DiscardTo(t *testing.T) {
 			Column: 7,
 		}
 
-		if diff := cmp.Diff(expectedCursor, l.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, customLexer.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if got, want := l.Width(), 0; got != want {
+		if got, want := customLexer.Width(), 0; got != want {
 			t.Errorf("Width: want: %v, got: %v", want, got)
 		}
 
-		if got, want := l.Token(), ""; got != want {
+		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
 		}
 	})

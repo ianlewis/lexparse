@@ -91,13 +91,13 @@ func parseExpr(
 	default:
 	}
 
-	t := parser.Next(ctx)
+	token := parser.Next(ctx)
 	var lhs *lexparse.Node[*exprNode]
-	switch t.Type {
+	switch token.Type {
 	case lexer.TokenTypeFloat, lexer.TokenTypeInt:
-		num, err := strconv.ParseFloat(t.Value, 64)
+		num, err := strconv.ParseFloat(token.Value, 64)
 		if err != nil {
-			return nil, tokenErr(err, t)
+			return nil, tokenErr(err, token)
 		}
 		lhs = parser.NewNode(&exprNode{
 			typ: nodeTypeNum,
@@ -115,9 +115,9 @@ func parseExpr(
 			return nil, tokenErr(errUnclosedParen, t2)
 		}
 	case lexer.TokenTypeEOF:
-		return nil, tokenErr(io.ErrUnexpectedEOF, t)
+		return nil, tokenErr(io.ErrUnexpectedEOF, token)
 	default:
-		return nil, tokenErr(errUnexpectedIdentifier, t)
+		return nil, tokenErr(errUnexpectedIdentifier, token)
 	}
 
 outerL:

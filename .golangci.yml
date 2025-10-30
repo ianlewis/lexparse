@@ -63,8 +63,7 @@ linters:
     - copyloopvar
 
     # Checks function and package cyclomatic complexity.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - cyclop
+    - cyclop
 
     # Check declaration order and count of types, constants, variables and
     # functions.
@@ -79,8 +78,7 @@ linters:
     - dogsled
 
     # Detects duplicate fragments of code.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - dupl
+    - dupl
 
     # Checks for duplicate words in the source code.
     - dupword
@@ -136,8 +134,7 @@ linters:
     - gocheckcompilerdirectives
 
     # Check that no global variables exist.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - gochecknoglobals
+    - gochecknoglobals
 
     # Checks that no init functions are present in Go code.
     - gochecknoinits
@@ -152,8 +149,7 @@ linters:
     - goconst
 
     # Provides diagnostics that check for bugs, performance and style issues.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - gocritic
+    - gocritic
 
     # Computes and checks the cyclomatic complexity of functions.
     # NOTE: gocyclo overlaps in functionality with cyclop.
@@ -184,7 +180,7 @@ linters:
     - gosec
 
     # Report certain i18n/l10n anti-patterns in your Go codebase.
-    # TODO(#142): Re-enable when its issues are fixed.
+    # NOTE: the project does not support i18n/l10n actively.
     # - gosmopolitan
 
     # Analyze expression groups.
@@ -198,20 +194,17 @@ linters:
     - importas
 
     # Reports interfaces with unnamed method parameters.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - inamedparam
+    - inamedparam
 
     # A linter that checks the number of methods inside an interface.
     - interfacebloat
 
     # Intrange is a linter to find places where for loops could make use of an
     # integer range.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - intrange
+    - intrange
 
     # Accept Interfaces, Return Concrete Types.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - ireturn
+    - ireturn
 
     # Reports long lines.
     - lll
@@ -255,8 +248,7 @@ linters:
     - nilnesserr
 
     # Checks that there is no simultaneous return of nil error and an invalid value.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - nilnil
+    - nilnil
 
     # nlreturn checks for a new line before return and branch statements to
     # increase code clarity.
@@ -302,8 +294,7 @@ linters:
 
     # Fast, configurable, extensible, flexible, and beautiful linter for Go.
     # Drop-in replacement of golint.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - revive
+    - revive
 
     # Checks whether Rows.Err of rows is checked successfully.
     - rowserrcheck
@@ -358,8 +349,7 @@ linters:
 
     # Checks that the length of a variable's name matches its scope.
     # NOTE: varnamelen isn't bad necessarily, but it is very noisy.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - varnamelen
+    - varnamelen
 
     # Finds wasted assignment statements.
     - wastedassign
@@ -385,7 +375,7 @@ linters:
   settings:
     cyclop:
       max-complexity: 30
-      package-average: 5
+      package-average: 6
 
     depguard:
       rules:
@@ -425,6 +415,11 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: true
+
+    exhaustive:
+      # Presence of "default" case in switch statements satisfies
+      # exhaustiveness, even if all enum members are not listed.
+      default-signifies-exhaustive: true
 
     gocognit:
       min-complexity: 40
