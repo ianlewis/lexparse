@@ -70,7 +70,7 @@ func (t Token) String() string {
 	if t.Type == TokenTypeEOF {
 		value = "<EOF>"
 	}
-	return fmt.Sprintf("%s:%s %s", t.Start, t.End, value)
+	return fmt.Sprintf("%s:%s: %s", t.Start, t.End, value)
 }
 
 // Lexer is an interface that defines the methods for a lexer that tokenizes

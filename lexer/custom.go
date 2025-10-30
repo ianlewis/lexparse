@@ -84,9 +84,9 @@ type CustomLexer struct {
 	err error
 }
 
-// NewCustomLexer creates a new Lexer initialized with the given starting [LexState].
-// The Lexer takes ownership of the tokens channel and closes it when lexing
-// is completed.
+// NewCustomLexer creates a new Lexer initialized with the given starting
+// [LexState]. The Lexer takes ownership of the tokens channel and closes it
+// when lexing is completed.
 func NewCustomLexer(r io.Reader, startingState LexState) *CustomLexer {
 	l := &CustomLexer{
 		state: startingState,

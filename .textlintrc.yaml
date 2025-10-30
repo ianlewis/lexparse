@@ -27,6 +27,7 @@ rules:
       - "/[Ll]exing/"
       - "/[Ll]exer/"
       - "/[Pp]arser/"
+      - "/[Tt]okenize/"
       - "/[Ww]hitespace/"
       - "API" # Application Programming Interface
       - "AST" # Abstract Syntax Tree

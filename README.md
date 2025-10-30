@@ -15,9 +15,9 @@ development.
 `lexparse` is a library for creating hand-written lexers and parsers. The API is
 based loosely off of Rob Pike's [Lexical Scanning in
 Go](https://www.youtube.com/watch?v=HxaD_trXwRE) where the lexer's state is
-itself a function. `lexparse` extends this concept to the parser and also
-implements state via an interface to allow data to be held for each state
-without the need for a closure.
+itself a function. `lexparse` extends this concept to the parser and implements
+state via an interface to allow data to be held for each state without the need
+for a closure.
 
 ## Why write a hand-written parser?
 
@@ -40,22 +40,78 @@ go get github.com/ianlewis/lexparse
 The API for `lexparse` is broken up into a lexing API and an optional parsing
 API. The lexing API handles separating input into tokens.
 
-### Lexer
+### `Lexer`
 
-The `Lexer` is a [lexical
+The `Lexer` interface represents a [lexical
 analyzer](https://en.wikipedia.org/wiki/Lexical_analysis) and operates on a
 buffered stream of text and outputs tokens which consist of a lexeme (the text)
-and a type. It is a [finite state
+and a type. It defines a `NextToken` method for retrieving the next token from
+the input stream, and an `Err` method for retrieving errors.
+
+```go
+// Lexer is an interface that defines the methods for a lexer that tokenizes
+// input streams. It reads from an input stream and emits [Token]s.
+type Lexer interface {
+    // NextToken returns the next token from the input. If there are no more
+    // tokens, the context is canceled, or an error occurs, it returns a Token
+    // with Type set to [TokenTypeEOF].
+    NextToken(context.Context) *Token
+
+    // Err returns the error encountered by the lexer, if any. If the error
+    // encountered is [io.EOF], it will return nil.
+    Err() error
+}
+```
+
+## `ScanningLexer`
+
+The `ScanningLexer` implements the `Lexer` interface using Go's built-in
+[`text/scanner`](https://pkg.go.dev/text/scanner) package. It is able to
+tokenize a wide variety of input that is similar enough to Go source code. For
+example, it is used in [`infix_example_test.go`](./infix_example_test.go) to
+tokenize simple mathematical expressions.
+
+```go
+r := strings.NewReader("1 + 3 * (4 - 2)")
+l := lexer.NewScanningLexer(r)
+
+t := &lexer.Token{}
+ctx := context.Background()
+for t.Type != lexer.TokenTypeEOF {
+    t = l.NextToken(ctx)
+    fmt.Printf("%s\n", t)
+}
+if err := l.Err(); err != nil {
+    panic(err)
+}
+
+// Output:
+1:1:1:2: 1
+1:3:1:4: +
+1:5:1:6: 3
+1:7:1:8: *
+1:9:1:10: (
+1:10:1:11: 4
+1:12:1:13: -
+1:14:1:15: 2
+1:15:1:16: )
+1:16:1:16: <EOF>
+```
+
+## `CustomLexer`
+
+The `CustomLexer` implements the `Lexer` interface and provides a framework for
+building a lexer with custom logic. It is a [finite state
 machine](https://en.wikipedia.org/wiki/Finite-state_machine) where each state
 (`LexState`) includes some logic for processing input while in that state. The
-`Lexer` maintains a cursor to the start of the currently processed token in
-addition to the underlying reader's position. When the token has been fully
+`CustomLexer` maintains a cursor to the start of the currently processed token
+in addition to the underlying reader's position. When the token has been fully
 processed it can be emitted to a channel for further processing by the `Parser`.
 
 Developers implement the token processing portion of the lexer by implementing
-`LexState` interface for each relevant lexer state. `Lexer` is passed to each
-`LexState` during processing and includes a number of methods that can be used
-to advance through the input text.
+`LexState` interface for each relevant lexer state. `CustomLexer` is passed to
+each `LexState` during processing and includes a number of methods that can be
+used to advance through the input text.
 
 For example, consider the following simple template language.
 
@@ -70,7 +126,7 @@ Welcome,
 We are looking forward to your visit.
 ```
 
-The `Lexer` might produce something like the following tokens:
+The `CustomLexer` might produce something like the following tokens:
 
 | Type           | Value                                           | State      |
 | -------------- | ----------------------------------------------- | ---------- |
@@ -117,9 +173,9 @@ graph TD
     SYMBOL-->TEXT
 ```
 
-The `Lexer` shouldn't necessarily be concerned with which symbols or identifiers
-are showing up in which order at this point. Robust error checking can be
-performed later by the parser.
+The `CustomLexer` shouldn't necessarily be concerned with which symbols or
+identifiers are showing up in which order at this point. Robust error checking
+can be performed later by the parser.
 
 ## `LexState`
 
@@ -142,7 +198,7 @@ We will first need to define our token types.
 
 ```go
 const (
-    textType lexparse.LexemeType = iota
+    textType lexer.TokenType = iota
     blockStartType
     blockEndType
     varStartType
@@ -161,7 +217,7 @@ advancing over the text.
 
 ```go
 // lexText tokenizes normal text.
-func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
+func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
     for {
         p := l.PeekN(2)
         switch string(p) {
@@ -169,7 +225,7 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
             if l.Width() > 0 {
                 l.Emit(lexTypeText)
             }
-            return lexparse.LexStateFn(lexCode), nil
+            return lexer.LexStateFn(lexCode), nil
         default:
         }
 
@@ -185,29 +241,33 @@ func lexText(_ context.Context, l *lexparse.Lexer) (lexparse.LexState, error) {
 }
 ```
 
-Each state can be implemented this way to complete the `Lexer`'s logic. You can
-find a full working example in
+Each state can be implemented this way to complete the `CustomLexer` logic. You
+can find a full working example in
 [`template_example_test.go`](./template_example_test.go).
 
-### Invoking the `Lexer`
+### Invoking the `CustomLexer`
 
-The `Lexer` is initialized with a starting state, a channel to send tokens to,
-and a buffered reader for the input. The reader implements the `BufferedReader`
-interface which does not have an implementation in the standard library, but a
-good implementation exists in [`ianlewis/runeio`].
+The `CustomLexer` is initialized with a starting state, a channel to send tokens
+to, and a reader for the input.
 
 ```go
-tokens := make(chan *lexparse.Token, 1024)
-lexer := lexparse.NewLexer(r, tokens, initState),
+r := strings.NewReader(textString)
+l := lexer.NewCustomLexer(r, initState)
 
-if err := lexer.Lex(context.Background); err != nil {
+t := &lexer.Token{}
+ctx := context.Background()
+for t.Type != lexer.TokenTypeEOF {
+    t = l.NextToken(ctx)
+    fmt.Printf("%s\n", t)
+}
+if err := l.Err(); err != nil {
     panic(err)
 }
 ```
 
 ## Parsing API
 
-The parsing API takes tokens from the `Lexer`, processes them, and creates an
+The parsing API takes tokens from a `Lexer`, processes them, and creates an
 [abstract syntax tree](https://en.wikipedia.org/wiki/Abstract_syntax_tree)
 (AST). The parsing API is optional in that the `Lexer` can be used on its own,
 or with a parser that is better suited to your use case.
@@ -348,8 +408,8 @@ func parseVarStart(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 ```
 
-Each state can be implemented this way to complete the `Parser`'s logic. You can
-find a full working example in
+Each state can be implemented this way to complete the logic of the `Parser`.
+You can find a full working example in
 [`template_example_test.go`](./template_example_test.go).
 
 ### Invoking the `Parser`
@@ -358,17 +418,17 @@ The `Parser` is initialized with a channel to receive tokens from, and the
 initial parser state.
 
 ```go
-tokens := make(chan *lexparse.Token, 1024)
+tokens := make(chan *lexer.Token, 1024)
 parser := lexparse.NewParser(tokens, initState),
 
 go func() {
     // send some tokens to the channel.
-    tokens<-lexparse.Token{
+    tokens<-lexer.Token{
         Type: tokenTypeText,
         Value: "some",
     }
 
-    tokens<-lexparse.Token{
+    tokens<-lexer.Token{
         Type: tokenTypeText,
         Value: "token",
     }
@@ -390,12 +450,11 @@ This returns the root node of the abstract syntax tree.
 ```go
 tmpl := `Hello, {% if subject %}{{ subject }}{% else %}World{% endif %}!`
 r := runeio.NewReader(strings.NewReader(tmpl))
-tokens := make(chan *lexparse.Token, 1024)
 
 tree, err := lexparse.LexParse(
     context.Background(),
-    lexparse.NewLexer(r, tokens, lexparse.LexStateFn(lexText)),
-    lexparse.NewParser(tokens, lexparse.ParseStateFn(parseRoot)),
+    lexer.NewCustomLexer(r, lexparse.LexStateFn(lexText)),
+    lexparse.ParseStateFn(parseRoot), // Starting parser state
 )
 ```
 
@@ -410,7 +469,6 @@ tree, err := lexparse.LexParse(
 
 See [`CONTRIBUTING.md`] for contributor documentation.
 
-[`ianlewis/runeio`]: https://github.com/ianlewis/runeio
 [`zalgonoise/parse`]: https://github.com/zalgonoise/parse
 [`zalgonoise/lex`]: https://github.com/zalgonoise/lex
 [`CONTRIBUTING.md`]: CONTRIBUTING.md
