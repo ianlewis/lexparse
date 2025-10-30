@@ -36,7 +36,7 @@ type tokenChan struct {
 	err error
 }
 
-// NextToken implements the [lexer.TokenSource.NextToken].
+// NextToken implements [lexer.TokenSource.NextToken].
 func (tc *tokenChan) NextToken(ctx context.Context) *lexer.Token {
 	// Set the error if the context is done. Note that we do not return here.
 	// The same context is used for the lexer and the lexer should return an EOF
