@@ -26,15 +26,7 @@ import (
 	"github.com/ianlewis/lexparse/lexer"
 )
 
-const (
-	lexTypeNum lexer.TokenType = iota
-	lexTypeOpenParen
-	lexTypeCloseParen
-	lexTypeOper
-)
-
 var (
-	errUnexpectedRune       = errors.New("unexpected rune")
 	errUnexpectedIdentifier = errors.New("unexpected identifier")
 	errUnclosedParen        = errors.New("unclosed parenthesis")
 	errUnexpectedParen      = errors.New("unexpected closing parenthesis")
@@ -79,72 +71,6 @@ func tokenErr(err error, t *lexer.Token) error {
 		t.Value, t.Start.Line, t.Start.Column)
 }
 
-// lexExpression tokenizes normal text.
-func lexExpression(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
-	for {
-		rn := l.Peek()
-		switch rn {
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			return lexer.LexStateFn(lexNum), nil
-		case '(':
-			// Open parenthesis.
-			if !l.Advance() {
-				panic(fmt.Errorf("%w: parsing expression", io.ErrUnexpectedEOF))
-			}
-			l.Emit(lexTypeOpenParen)
-		case ')':
-			// Close parenthesis.
-			if !l.Advance() {
-				panic(fmt.Errorf("%w: parsing expression", io.ErrUnexpectedEOF))
-			}
-			l.Emit(lexTypeCloseParen)
-		case '+', '-', '*', '/':
-			// Operator.
-			if !l.Advance() {
-				panic(fmt.Errorf("%w: parsing expression", io.ErrUnexpectedEOF))
-			}
-			l.Emit(lexTypeOper)
-		case ' ', '\t':
-			// Whitespace characters.
-			if !l.Discard() {
-				panic(fmt.Errorf("%w: parsing expression", io.ErrUnexpectedEOF))
-			}
-			continue
-		case lexer.EOF:
-			// End of file.
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("%w: '%s'", errUnexpectedRune, string(rn))
-		}
-	}
-}
-
-// lexNum lexes a number from the input stream.
-func lexNum(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
-	for {
-		rn := l.Peek()
-		switch rn {
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			// Digit character.
-		case '.':
-			// Decimal point.
-		default:
-			if l.Width() > 0 {
-				l.Emit(lexTypeNum)
-			}
-			return lexer.LexStateFn(lexExpression), nil
-		}
-
-		// Advance the input stream.
-		if !l.Advance() {
-			if l.Width() > 0 {
-				l.Emit(lexTypeNum)
-			}
-			return nil, nil
-		}
-	}
-}
-
 // pratt implements a Pratt operator-precedence parser for infix expressions.
 func pratt(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
 	n, err := parseExpr(ctx, parser, 0, 0)
@@ -168,7 +94,7 @@ func parseExpr(
 	t := parser.Next(ctx)
 	var lhs *lexparse.Node[*exprNode]
 	switch t.Type {
-	case lexTypeNum:
+	case lexer.TokenTypeFloat, lexer.TokenTypeInt:
 		num, err := strconv.ParseFloat(t.Value, 64)
 		if err != nil {
 			return nil, tokenErr(err, t)
@@ -177,7 +103,7 @@ func parseExpr(
 			typ: nodeTypeNum,
 			num: num,
 		})
-	case lexTypeOpenParen:
+	case '(':
 		// Parse the expression inside the parentheses.
 		lhs2, err := parseExpr(ctx, parser, depth+1, 0)
 		if err != nil {
@@ -185,7 +111,7 @@ func parseExpr(
 		}
 		lhs = lhs2
 		t2 := parser.Next(ctx)
-		if t2.Type != lexTypeCloseParen {
+		if t2.Type != ')' {
 			return nil, tokenErr(errUnclosedParen, t2)
 		}
 	case lexer.TokenTypeEOF:
@@ -199,14 +125,14 @@ outerL:
 		var opVal *exprNode
 		opToken := parser.Peek(ctx)
 		switch opToken.Type {
-		case lexTypeOper:
+		case '+', '-', '*', '/':
 			opVal = &exprNode{
 				typ:  nodeTypeOper,
 				oper: opToken.Value,
 			}
 		case lexer.TokenTypeEOF:
 			break outerL
-		case lexTypeCloseParen:
+		case ')':
 			if depth == 0 {
 				return nil, tokenErr(errUnexpectedParen, opToken)
 			}
@@ -279,7 +205,7 @@ func Example_infixCalculator() {
 
 	t, err := lexparse.LexParse(
 		context.Background(),
-		lexer.NewCustomLexer(r, lexer.LexStateFn(lexExpression)),
+		lexer.NewScanningLexer(r),
 		lexparse.ParseStateFn(pratt),
 	)
 	if err != nil {
