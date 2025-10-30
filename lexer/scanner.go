@@ -71,6 +71,8 @@ func NewScanningLexer(r io.Reader) *ScanningLexer {
 		},
 	}
 	l.s = l.s.Init(r)
+	// Configure the scanner to be more generic and to not skip Go comments.
+	l.s.Mode = scanner.ScanIdents | scanner.ScanFloats | scanner.ScanChars | scanner.ScanStrings | scanner.ScanRawStrings | scanner.ScanComments
 
 	return &l
 }
