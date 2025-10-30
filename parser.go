@@ -35,9 +35,10 @@ type Node[V comparable] struct {
 // ParseState is the state of the current parsing state machine. It defines the logic
 // to process the current state and returns the next state.
 type ParseState[V comparable] interface {
-	// Run returns the next state to transition to or an error. If the returned
-	// next state is nil or the returned error is io.EOF then the Lexer
-	// finishes processing normally.
+	// Run executes the logic at the current state, returning an error if one is
+	// encountered. Implementations are expected to add new [Node] objects to
+	// the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
+	// state should be pushed onto the stack as needed using [Parser.PushState].
 	Run(context.Context, *Parser[V]) error
 }
 
