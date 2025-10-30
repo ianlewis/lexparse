@@ -19,7 +19,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"text/scanner"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -31,7 +30,7 @@ type parseTokenState struct{}
 
 func (w *parseTokenState) Run(ctx context.Context, p *Parser[string]) error {
 	switch token := p.Next(ctx); token.Type {
-	case scanner.Ident:
+	case lexer.TokenTypeIdent:
 		p.Node(token.Value)
 		p.PushState(w)
 		return nil
@@ -115,6 +114,7 @@ var (
 
 type lexErrState struct{}
 
+//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
 func (e *lexErrState) Run(context.Context, *lexer.CustomLexer) (lexer.LexState, error) {
 	return nil, errState
 }
@@ -185,8 +185,8 @@ func TestCustomLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexer := lexer.NewCustomLexer(r, &lexErrState{})
-		_, got := LexParse(ctx, lexer, &parseErrState{})
+		l := lexer.NewCustomLexer(r, &lexErrState{})
+		_, got := LexParse(ctx, l, &parseErrState{})
 		want := errState
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)
@@ -202,8 +202,8 @@ func TestCustomLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lexer := lexer.NewCustomLexer(r, &lexWordState{})
-		_, got := LexParse(ctx, lexer, &parseErrState{})
+		l := lexer.NewCustomLexer(r, &lexWordState{})
+		_, got := LexParse(ctx, l, &parseErrState{})
 		want := errParse
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)

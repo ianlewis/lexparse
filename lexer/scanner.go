@@ -24,7 +24,7 @@ import (
 
 var errScanner = errors.New("scanner error")
 
-var (
+const (
 	// TokenTypeEOF represents the end of the file.
 	TokenTypeEOF = TokenType(scanner.EOF)
 

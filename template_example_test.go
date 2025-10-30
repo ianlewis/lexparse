@@ -90,16 +90,16 @@ func lexTokenErr(err error, t *lexer.Token) error {
 }
 
 // lexText tokenizes normal text.
+//
+//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
 func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
-		p := l.PeekN(2)
-		switch string(p) {
-		case tokenBlockStart, tokenVarStart:
+		p := string(l.PeekN(2))
+		if p == tokenBlockStart || p == tokenVarStart {
 			if l.Width() > 0 {
 				l.Emit(lexTypeText)
 			}
 			return lexer.LexStateFn(lexCode), nil
-		default:
 		}
 
 		// Advance the input.
@@ -108,19 +108,21 @@ func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 			if l.Width() > 0 {
 				l.Emit(lexTypeText)
 			}
-			return nil, nil
+			return nil, io.EOF
 		}
 	}
 }
 
 // lexCode tokenizes template code.
+//
+//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
 func lexCode(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	// Consume whitespace and discard it.
 	// TODO(#94): use backtracking
 	for unicode.IsSpace(l.Peek()) {
 		if !l.Discard() {
 			// End of input
-			return nil, nil
+			return nil, io.EOF
 		}
 	}
 
@@ -137,6 +139,8 @@ func lexCode(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 }
 
 // lexIden tokenizes identifiers (e.g. variable names).
+//
+//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
 func lexIden(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
 		if rn := l.Peek(); !idenRegexp.MatchString(string(rn)) {
@@ -145,36 +149,38 @@ func lexIden(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 		}
 
 		if !l.Advance() {
-			return nil, nil
+			return nil, io.EOF
 		}
 	}
 }
 
 // lexSymbol tokenizes template symbols (e.g. {%, {{, }}, %}).
-func lexSymbol(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
+//
+//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
+func lexSymbol(_ context.Context, customLexer *lexer.CustomLexer) (lexer.LexState, error) {
 	for {
-		switch l.Token() {
+		switch customLexer.Token() {
 		case tokenVarStart:
-			l.Emit(lexTypeVarStart)
+			customLexer.Emit(lexTypeVarStart)
 			return lexer.LexStateFn(lexCode), nil
 		case tokenVarEnd:
-			l.Emit(lexTypeVarEnd)
+			customLexer.Emit(lexTypeVarEnd)
 			return lexer.LexStateFn(lexText), nil
 		case tokenBlockStart:
-			l.Emit(lexTypeBlockStart)
+			customLexer.Emit(lexTypeBlockStart)
 			return lexer.LexStateFn(lexCode), nil
 		case tokenBlockEnd:
-			l.Emit(lexTypeBlockEnd)
+			customLexer.Emit(lexTypeBlockEnd)
 			return lexer.LexStateFn(lexText), nil
 		default:
-			if rn := l.Peek(); !symbolRegexp.MatchString(string(rn)) {
+			if rn := customLexer.Peek(); !symbolRegexp.MatchString(string(rn)) {
 				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d",
-					errRune, rn, l.Pos().Line, l.Pos().Column)
+					errRune, rn, customLexer.Pos().Line, customLexer.Pos().Column)
 			}
 		}
 
-		if !l.Advance() {
-			return nil, nil
+		if !customLexer.Advance() {
+			return nil, io.EOF
 		}
 	}
 }
@@ -200,6 +206,7 @@ func parseSeq(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 		p.PushState(lexparse.ParseStateFn(parseVarStart))
 	case lexTypeBlockStart:
 		p.PushState(lexparse.ParseStateFn(parseBlockStart))
+	default:
 	}
 
 	return nil
@@ -319,13 +326,13 @@ func parseIf(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseElse handles an else (or endif) block.
-func parseElse(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
-	token := p.Peek(ctx)
+func parseElse(ctx context.Context, parser *lexparse.Parser[*tmplNode]) error {
+	token := parser.Peek(ctx)
 
 	switch token.Type {
 	case lexTypeIdentifier:
 		// Validate we are at a sequence node.
-		if cur := p.Pos(); cur.Value.typ != nodeTypeSeq {
+		if cur := parser.Pos(); cur.Value.typ != nodeTypeSeq {
 			return lexTokenErr(errIdentifier, token)
 		}
 	case lexer.TokenTypeEOF:
@@ -337,22 +344,22 @@ func parseElse(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 	switch token.Value {
 	case tokenElse:
 		// Consume the token.
-		_ = p.Next(ctx)
+		_ = parser.Next(ctx)
 
 		// Climb the tree back to the conditional.
-		p.Climb()
+		parser.Climb()
 
 		// Validate that we are in a conditional and there isn't already an else branch.
-		if cur := p.Pos(); cur.Value.typ != nodeTypeBranch || len(cur.Children) != 2 {
+		if cur := parser.Pos(); cur.Value.typ != nodeTypeBranch || len(cur.Children) != 2 {
 			return lexTokenErr(errIdentifier, token)
 		}
 
 		// Add an else sequence node to the conditional.
-		_ = p.Push(&tmplNode{
+		_ = parser.Push(&tmplNode{
 			typ: nodeTypeSeq,
 		})
 
-		p.PushState(
+		parser.PushState(
 			// Parse the '%}'
 			lexparse.ParseStateFn(parseBlockEnd),
 
@@ -363,7 +370,7 @@ func parseElse(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 			lexparse.ParseStateFn(parseEndif),
 		)
 	case tokenEndif:
-		p.PushState(lexparse.ParseStateFn(parseEndif))
+		parser.PushState(lexparse.ParseStateFn(parseEndif))
 	default:
 		return lexTokenErr(fmt.Errorf("%w: looking for %q or %q", errIdentifier, tokenElse, tokenEndif), token)
 	}
@@ -401,9 +408,9 @@ func parseEndif(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 }
 
 // parseBlockStart handles the start of a template block '{%'.
-func parseBlockStart(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
+func parseBlockStart(ctx context.Context, parser *lexparse.Parser[*tmplNode]) error {
 	// Validate the block start token.
-	switch token := p.Next(ctx); token.Type {
+	switch token := parser.Next(ctx); token.Type {
 	case lexTypeBlockStart:
 		// OK
 		fmt.Fprintln(os.Stderr, token.Value)
@@ -414,7 +421,7 @@ func parseBlockStart(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 	}
 
 	// Validate the command token.
-	token := p.Peek(ctx)
+	token := parser.Peek(ctx)
 	switch token.Type {
 	case lexTypeIdentifier:
 		// OK
@@ -428,7 +435,7 @@ func parseBlockStart(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 	// Handle the block command.
 	switch token.Value {
 	case tokenIf:
-		p.PushState(lexparse.ParseStateFn(parseBranch))
+		parser.PushState(lexparse.ParseStateFn(parseBranch))
 	case tokenElse, tokenEndif:
 		// NOTE: parseElse,parseEndif should already be on the stack.
 	default:
@@ -469,40 +476,40 @@ func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 	return b.String(), nil
 }
 
-func execNode(root *lexparse.Node[*tmplNode], data map[string]string, b *strings.Builder) error {
-	for _, n := range root.Children {
-		switch n.Value.typ {
+func execNode(root *lexparse.Node[*tmplNode], data map[string]string, bldr *strings.Builder) error {
+	for _, node := range root.Children {
+		switch node.Value.typ {
 		case nodeTypeText:
 			// Write raw text to the output.
-			b.WriteString(n.Value.text)
+			bldr.WriteString(node.Value.text)
 		case nodeTypeVar:
 			// Replace templated variables with given data.
-			b.WriteString(data[n.Value.varName])
+			bldr.WriteString(data[node.Value.varName])
 		case nodeTypeBranch:
 			// condition sanity check
-			if len(n.Children) < 2 {
-				panic(fmt.Sprintf("invalid branch: %#v", n))
+			if len(node.Children) < 2 {
+				panic(fmt.Sprintf("invalid branch: %#v", node))
 			}
 
 			// Get the condition.
-			cond := n.Children[0]
+			cond := node.Children[0]
 			// Condition sanity check
 			if cond.Value.typ != nodeTypeVar {
 				panic(fmt.Sprintf("invalid branch condition: %#v", cond))
 			}
 
-			v, err := strconv.ParseBool(data[n.Value.varName])
-			if (err == nil && v) || (err != nil && data[n.Value.varName] != "") {
-				if err := execNode(n.Children[0], data, b); err != nil {
+			v, err := strconv.ParseBool(data[node.Value.varName])
+			if (err == nil && v) || (err != nil && data[node.Value.varName] != "") {
+				if err := execNode(node.Children[0], data, bldr); err != nil {
 					return err
 				}
 			} else {
-				if err := execNode(n.Children[1], data, b); err != nil {
+				if err := execNode(node.Children[1], data, bldr); err != nil {
 					return err
 				}
 			}
 		case nodeTypeSeq:
-			if err := execNode(n, data, b); err != nil {
+			if err := execNode(node, data, bldr); err != nil {
 				return err
 			}
 		}
