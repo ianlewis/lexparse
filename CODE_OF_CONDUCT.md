@@ -27,12 +27,12 @@ community include:
 
 Examples of unacceptable behavior include:
 
-- The use of sexualized language or imagery, and sexual attention or
-  advances of any kind
-- Trolling, insulting or derogatory comments, and personal or political attacks
+- The use of sexualized language or imagery, and sexual attention or advances of
+  any kind
+- Trolling, insulting, or derogatory comments, and personal or political attacks
 - Public or private harassment
-- Publishing others' private information, such as a physical or email
-  address, without their explicit permission
+- Publishing others' private information, such as a physical or email address,
+  without their explicit permission
 - Other conduct which could reasonably be considered inappropriate in a
   professional setting
 
@@ -50,15 +50,13 @@ decisions when appropriate.
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies when
+This Code of Conduct applies within all community spaces, and applies when
 an individual is officially representing the community in public spaces.
 Examples of representing our community include using an official e-mail address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
 ## Enforcement
-
-<!-- TODO: update Code of Conduct contact email -->
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
