@@ -16,14 +16,10 @@ package lexparse
 
 import (
 	"context"
-	"io"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/google/go-cmp/cmp"
-
-	"github.com/ianlewis/lexparse/lexer"
 )
 
 // addParent sets the parent reference on all children of `n`.
@@ -38,34 +34,11 @@ func addParent[V comparable](n *Node[V]) *Node[V] {
 	return n
 }
 
-const (
-	wordType lexer.TokenType = iota + 1
-)
-
-type lexWordState struct{}
-
-//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
-func (w *lexWordState) Run(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
-	rn := l.Peek()
-	if unicode.IsSpace(rn) || rn == lexer.EOF {
-		// NOTE: This can emit empty words.
-		l.Emit(wordType)
-		// Discard the space
-		if !l.Discard() {
-			return nil, io.EOF
-		}
-	}
-
-	l.Advance()
-
-	return w, nil
-}
-
 // testParse creates and runs a lexer, and returns the root of the parse tree.
 func testParse(t *testing.T, input string) (*Node[string], error) {
 	t.Helper()
 
-	l := lexer.NewCustomLexer(strings.NewReader(input), &lexWordState{})
+	l := NewCustomLexer(strings.NewReader(input), &lexWordState{})
 	ctx := context.Background()
 
 	parser := NewParser(l, ParseStateFn(func(_ context.Context, innerParser *Parser[string]) error {
@@ -74,7 +47,7 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 			switch token.Type {
 			case wordType:
 				// OK
-			case lexer.TokenTypeEOF:
+			case TokenTypeEOF:
 				return nil
 			default:
 				panic("unknown type")
@@ -105,7 +78,7 @@ func TestParser_new(t *testing.T) {
 	p := NewParser[string](nil, nil)
 
 	expectedRoot := &Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -133,7 +106,7 @@ func TestParser_parse_op2(t *testing.T) {
 
 	// Does the tree look as expected?
 	expectedRoot := addParent(&Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -141,7 +114,7 @@ func TestParser_parse_op2(t *testing.T) {
 		Children: []*Node[string]{
 			{
 				Value: "push",
-				Start: lexer.Position{
+				Start: Position{
 					Offset: 0,
 					Line:   1,
 					Column: 1,
@@ -149,7 +122,7 @@ func TestParser_parse_op2(t *testing.T) {
 				Children: []*Node[string]{
 					{
 						Value: "1",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 5,
 							Line:   1,
 							Column: 6,
@@ -157,7 +130,7 @@ func TestParser_parse_op2(t *testing.T) {
 					},
 					{
 						Value: "push",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 7,
 							Line:   1,
 							Column: 8,
@@ -165,7 +138,7 @@ func TestParser_parse_op2(t *testing.T) {
 						Children: []*Node[string]{
 							{
 								Value: "2",
-								Start: lexer.Position{
+								Start: Position{
 									Offset: 12,
 									Line:   1,
 									Column: 13,
@@ -173,7 +146,7 @@ func TestParser_parse_op2(t *testing.T) {
 							},
 							{
 								Value: "3",
-								Start: lexer.Position{
+								Start: Position{
 									Offset: 14,
 									Line:   1,
 									Column: 15,
@@ -195,7 +168,7 @@ func TestParser_NextPeek(t *testing.T) {
 	t.Parallel()
 
 	input := "A B C"
-	l := lexer.NewCustomLexer(strings.NewReader(input), &lexWordState{})
+	l := NewCustomLexer(strings.NewReader(input), &lexWordState{})
 
 	parser := NewParser[string](l, nil)
 
@@ -204,15 +177,15 @@ func TestParser_NextPeek(t *testing.T) {
 	// Expect to read the first token `A`
 	tokenA := parser.Next(ctx)
 
-	wanttokenA := &lexer.Token{
+	wanttokenA := &Token{
 		Type:  wordType,
 		Value: "A",
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
 		},
-		End: lexer.Position{
+		End: Position{
 			Offset: 1,
 			Line:   1,
 			Column: 2,
@@ -224,15 +197,15 @@ func TestParser_NextPeek(t *testing.T) {
 
 	peekTokenB := parser.Peek(ctx)
 
-	wantTokenB := &lexer.Token{
+	wantTokenB := &Token{
 		Type:  wordType,
 		Value: "B",
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 2,
 			Line:   1,
 			Column: 3,
 		},
-		End: lexer.Position{
+		End: Position{
 			Offset: 3,
 			Line:   1,
 			Column: 4,
@@ -250,15 +223,15 @@ func TestParser_NextPeek(t *testing.T) {
 
 	tokenC := parser.Next(ctx)
 
-	wantTokenC := &lexer.Token{
+	wantTokenC := &Token{
 		Type:  wordType,
 		Value: "C",
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 4,
 			Line:   1,
 			Column: 5,
 		},
-		End: lexer.Position{
+		End: Position{
 			Offset: 5,
 			Line:   1,
 			Column: 6,
@@ -271,15 +244,15 @@ func TestParser_NextPeek(t *testing.T) {
 	// The expected end of tokens
 	niltoken := parser.Next(ctx)
 
-	tokenEOF := &lexer.Token{
-		Type:  lexer.TokenTypeEOF,
+	tokenEOF := &Token{
+		Type:  TokenTypeEOF,
 		Value: "",
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 5,
 			Line:   1,
 			Column: 6,
 		},
-		End: lexer.Position{
+		End: Position{
 			Offset: 5,
 			Line:   1,
 			Column: 6,
@@ -297,7 +270,7 @@ func TestParser_Node(t *testing.T) {
 
 	child1 := parser.Node("A")
 	expectedRootA := addParent(&Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -319,7 +292,7 @@ func TestParser_Node(t *testing.T) {
 
 	child2 := parser.Node("B")
 	expectedRootB := addParent(&Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -354,7 +327,7 @@ func TestParser_ClimbPos(t *testing.T) {
 
 	parser.root = addParent(
 		&Node[string]{
-			Start: lexer.Position{
+			Start: Position{
 				Offset: 0,
 				Line:   1,
 				Column: 1,
@@ -422,7 +395,7 @@ func TestParser_Push(t *testing.T) {
 	valA := "A"
 
 	expectedRootA := addParent(&Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -448,7 +421,7 @@ func TestParser_Push(t *testing.T) {
 	valB := "B"
 
 	expectedRootB := addParent(&Node[string]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,

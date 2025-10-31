@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package lexer defines a Lexer interface and related types for tokenizing
-// input streams.
-package lexer
+package lexparse
 
 import (
 	"context"
