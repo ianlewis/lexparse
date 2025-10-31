@@ -142,9 +142,12 @@ func TestScannerLexer_NextToken(t *testing.T) {
 			t.Parallel()
 
 			lexer := NewScanningLexer(strings.NewReader(tt.input))
+
 			var tokens []*Token
+
 			for {
 				token := lexer.NextToken(context.Background())
+
 				tokens = append(tokens, token)
 				if token.Type == TokenTypeEOF {
 					break

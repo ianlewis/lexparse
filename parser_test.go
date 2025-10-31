@@ -34,6 +34,7 @@ func addParent[V comparable](n *Node[V]) *Node[V] {
 			_ = addParent(c)
 		}
 	}
+
 	return n
 }
 
@@ -94,6 +95,7 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 	}))
 
 	root, err := parser.Parse(context.Background())
+
 	return root, err
 }
 
@@ -201,6 +203,7 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// Expect to read the first token `A`
 	tokenA := parser.Next(ctx)
+
 	wanttokenA := &lexer.Token{
 		Type:  wordType,
 		Value: "A",
@@ -220,6 +223,7 @@ func TestParser_NextPeek(t *testing.T) {
 	}
 
 	peekTokenB := parser.Peek(ctx)
+
 	wantTokenB := &lexer.Token{
 		Type:  wordType,
 		Value: "B",
@@ -245,6 +249,7 @@ func TestParser_NextPeek(t *testing.T) {
 	}
 
 	tokenC := parser.Next(ctx)
+
 	wantTokenC := &lexer.Token{
 		Type:  wordType,
 		Value: "C",
@@ -265,6 +270,7 @@ func TestParser_NextPeek(t *testing.T) {
 
 	// The expected end of tokens
 	niltoken := parser.Next(ctx)
+
 	tokenEOF := &lexer.Token{
 		Type:  lexer.TokenTypeEOF,
 		Value: "",
@@ -414,6 +420,7 @@ func TestParser_Push(t *testing.T) {
 	parser := NewParser[string](nil, nil)
 
 	valA := "A"
+
 	expectedRootA := addParent(&Node[string]{
 		Start: lexer.Position{
 			Offset: 0,
@@ -429,14 +436,17 @@ func TestParser_Push(t *testing.T) {
 	if diff := cmp.Diff(expectedRootA.Children[0], parser.Push(valA)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valA, diff)
 	}
+
 	if diff := cmp.Diff(expectedRootA.Children[0], parser.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
+
 	if diff := cmp.Diff(expectedRootA, parser.root); diff != "" {
 		t.Errorf("parser.root (-want, +got): \n%s", diff)
 	}
 
 	valB := "B"
+
 	expectedRootB := addParent(&Node[string]{
 		Start: lexer.Position{
 			Offset: 0,
@@ -457,9 +467,11 @@ func TestParser_Push(t *testing.T) {
 	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], parser.Push(valB)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valB, diff)
 	}
+
 	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], parser.node); diff != "" {
 		t.Errorf("parser.node (-want, +got): \n%s", diff)
 	}
+
 	if diff := cmp.Diff(expectedRootB, parser.root); diff != "" {
 		t.Errorf("parser.root (-want, +got): \n%s", diff)
 	}

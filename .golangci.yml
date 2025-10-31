@@ -363,8 +363,7 @@ linters:
 
     # Add or remove empty lines.
     # NOTE: wsl isn't bad necessarily, but it can be very noisy.
-    # TODO(#142): Re-enable when its issues are fixed.
-    # - wsl_v5
+    - wsl_v5
 
     # Detects the wrong usage of zerolog that a user forgets to dispatch with
     # Send or Msg.

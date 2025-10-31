@@ -43,15 +43,15 @@ type lexFnState struct {
 
 // Run implements [LexState.Run].
 //
-//nolint:lll // nolintlint is broken here so we add nolint on the same line.
-func (s *lexFnState) Run(ctx context.Context, l *CustomLexer) (LexState, error) { //nolint:ireturn // returning interface is required to satisfy LexState.
+//nolint:ireturn // Returning interface required to satisfy [LexState.Run]
+func (s *lexFnState) Run(ctx context.Context, l *CustomLexer) (LexState, error) {
 	return s.f(ctx, l)
 }
 
 // LexStateFn creates a State from the given Run function.
 //
-//nolint:lll // nolintlint is broken here so we add nolint on the same line.
-func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexState { //nolint:ireturn // returning interface is required to satisfy LexState.
+//nolint:ireturn // Returning interface required to satisfy [LexState.Run]
+func LexStateFn(f func(context.Context, *CustomLexer) (LexState, error)) LexState {
 	return &lexFnState{f}
 }
 
@@ -141,18 +141,23 @@ func (l *CustomLexer) NextRune() rune {
 	if l.err != nil {
 		return EOF
 	}
+
 	rn, _, err := l.r.ReadRune()
 	if err != nil {
 		l.setErr(err)
 		return EOF
 	}
+
 	l.pos.Offset++
+
 	l.pos.Column++
 	if rn == '\n' {
 		l.pos.Line++
 		l.pos.Column = 1
 	}
+
 	_, _ = l.b.WriteRune(rn)
+
 	return rn
 }
 
@@ -176,8 +181,10 @@ func (l *CustomLexer) NextToken(ctx context.Context) *Token {
 		}
 
 		var err error
+
 		l.state, err = l.state.Run(ctx, l)
 		l.setErr(err)
+
 		if l.err != nil {
 			return l.newToken(TokenTypeEOF)
 		}
@@ -189,12 +196,14 @@ func (l *CustomLexer) NextToken(ctx context.Context) *Token {
 		if token.Type != TokenTypeEOF {
 			l.buf = l.buf[1:]
 		}
+
 		return token
 	}
 
 	// The state is nil and we have no tokens to return, so we are at the end
 	// of the input.
 	l.err = io.EOF
+
 	return l.newToken(TokenTypeEOF)
 }
 
@@ -205,6 +214,7 @@ func (l *CustomLexer) Peek() rune {
 	if len(p) < 1 {
 		return EOF
 	}
+
 	return p[0]
 }
 
@@ -218,6 +228,7 @@ func (l *CustomLexer) PeekN(n int) []rune {
 
 	p, err := l.r.Peek(n)
 	l.setErr(err)
+
 	return p
 }
 
@@ -251,7 +262,9 @@ func (l *CustomLexer) advance(numRunes int, discard bool) int {
 	if l.err != nil {
 		return 0
 	}
+
 	var advanced int
+
 	if discard {
 		defer l.Ignore()
 	}
@@ -260,12 +273,14 @@ func (l *CustomLexer) advance(numRunes int, discard bool) int {
 	// directly to the buffer's memory.
 	// Minimum size the buffer of underlying reader could be expected to be.
 	minSize := 16
+
 	for numRunes > 0 {
 		// Determine the number of runes to read.
 		toRead := l.r.Buffered()
 		if numRunes < toRead {
 			toRead = numRunes
 		}
+
 		if toRead == 0 {
 			if minSize < numRunes {
 				toRead = minSize
@@ -295,20 +310,25 @@ func (l *CustomLexer) advance(numRunes int, discard bool) int {
 				l.pos.Column++
 			}
 		}
+
 		if !discard {
 			l.b.WriteString(string(peekedRunes))
 		}
+
 		if dErr != nil {
 			l.setErr(fmt.Errorf("discarding input: %w", err))
 			return advanced
 		}
+
 		if err != nil {
 			// EOF from Peek
 			l.setErr(err)
 			return advanced
 		}
+
 		numRunes -= numDiscarded
 	}
+
 	return advanced
 }
 
@@ -380,6 +400,7 @@ func (l *CustomLexer) DiscardTo(query []string) string {
 						// An error has likely occurred.
 						return ""
 					}
+
 					return query[j]
 				}
 			}
@@ -392,6 +413,7 @@ func (l *CustomLexer) DiscardTo(query []string) string {
 		if toDiscard <= 0 {
 			toDiscard = 1
 		}
+
 		if n := l.advance(toDiscard, true); n < toDiscard {
 			// We should have been able to advance by this amount.
 			// An error has likely occurred.

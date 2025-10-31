@@ -47,6 +47,7 @@ func (p Position) String() string {
 	if p.Filename != "" {
 		return p.Filename + ":" + strconv.Itoa(p.Line) + ":" + strconv.Itoa(p.Column)
 	}
+
 	return strconv.Itoa(p.Line) + ":" + strconv.Itoa(p.Column)
 }
 
@@ -71,6 +72,7 @@ func (t Token) String() string {
 	if t.Type == TokenTypeEOF {
 		value = "<EOF>"
 	}
+
 	return fmt.Sprintf("%s:%s: %s", t.Start, t.End, value)
 }
 

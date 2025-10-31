@@ -31,7 +31,7 @@ const (
 
 type lexWordState struct{}
 
-//nolint:ireturn // returning interface is required to satisfy LexState.
+//nolint:ireturn // Returning interface required to satisfy [LexState.Run]
 func (w *lexWordState) Run(_ context.Context, l *CustomLexer) (LexState, error) {
 	rn := l.Peek()
 	if unicode.IsSpace(rn) || rn == EOF {
@@ -57,6 +57,7 @@ func TestLexer_Peek(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := rn, 'H'; got != want {
 		t.Errorf("Peek: want: %v, got: %v", want, got)
 	}
@@ -91,6 +92,7 @@ func TestLexer_PeekN(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := string(rns), "Hello\n"; got != want {
 		t.Errorf("Peek: want: %q, got: %q", want, got)
 	}
@@ -99,6 +101,7 @@ func TestLexer_PeekN(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := string(rns), "Hello\nWorld!"; got != want {
 		t.Errorf("Peek: want: %q, got: %q", want, got)
 	}
@@ -136,6 +139,7 @@ func TestLexer_Advance(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, true; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -144,6 +148,7 @@ func TestLexer_Advance(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "ello\n!Adva"; got != want {
 			t.Errorf("PeekN: want: %q, got: %q", want, got)
 		}
@@ -187,6 +192,7 @@ func TestLexer_Advance(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, false; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -233,6 +239,7 @@ func TestLexer_AdvanceN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, 5; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -241,6 +248,7 @@ func TestLexer_AdvanceN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "\n!Advance!"; got != want {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
@@ -283,6 +291,7 @@ func TestLexer_AdvanceN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, 15; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -329,6 +338,7 @@ func TestLexer_Discard(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := discarded, true; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
@@ -337,6 +347,7 @@ func TestLexer_Discard(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "ello\n!Adva"; got != want {
 			t.Errorf("PeekN: want: %q, got: %q", want, got)
 		}
@@ -380,6 +391,7 @@ func TestLexer_Discard(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := discarded, false; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
@@ -426,6 +438,7 @@ func TestLexer_DiscardN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := discarded, 7; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
@@ -434,6 +447,7 @@ func TestLexer_DiscardN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "Discard!"; got != want {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
@@ -476,6 +490,7 @@ func TestLexer_DiscardN(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := discarded, 15; got != want {
 			t.Errorf("Discard: want: %v, got: %v", want, got)
 		}
@@ -520,6 +535,7 @@ func TestLexer_Find_match(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := token, "Find"; got != want {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
@@ -573,6 +589,7 @@ func TestLexer_Find_short_match(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := token, "Find!"; got != want {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
@@ -616,6 +633,7 @@ func TestLexer_Find_no_match(t *testing.T) {
 	if err := customLexer.Err(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+
 	if got, want := token, ""; got != want {
 		t.Errorf("unexpected token: want: %q, got: %q", want, got)
 	}
@@ -661,6 +679,7 @@ func TestLexer_Ignore(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, 7; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -669,6 +688,7 @@ func TestLexer_Ignore(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "Ignore!"; got != want {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
@@ -707,6 +727,7 @@ func TestLexer_Ignore(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := advanced, 7; got != want {
 			t.Errorf("Advance: want: %v, got: %v", want, got)
 		}
@@ -715,6 +736,7 @@ func TestLexer_Ignore(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "\n"; got != want {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
@@ -762,6 +784,7 @@ func TestLexer_DiscardTo(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := token, "Find"; got != want {
 			t.Errorf("unexpected token: want: %q, got: %q", want, got)
 		}
@@ -770,6 +793,7 @@ func TestLexer_DiscardTo(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := string(rns), "Find!"; got != want {
 			t.Errorf("Peek: want: %q, got: %q", want, got)
 		}
@@ -813,6 +837,7 @@ func TestLexer_DiscardTo(t *testing.T) {
 		if err := customLexer.Err(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+
 		if got, want := token, ""; got != want {
 			t.Errorf("unexpected token: want: %q, got: %q", want, got)
 		}

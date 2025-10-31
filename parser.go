@@ -51,6 +51,7 @@ func (s *parseFnState[V]) Run(ctx context.Context, p *Parser[V]) error {
 	if s.f == nil {
 		return nil
 	}
+
 	return s.f(ctx, p)
 }
 
@@ -72,6 +73,7 @@ func (s *stack[V]) pop() ParseState[V] {
 
 	v := (*s)[len(*s)-1]
 	*s = (*s)[:len(*s)-1]
+
 	return v
 }
 
@@ -148,6 +150,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 				//nolint:wrapcheck // no additional error context for error.
 				return p.root, err
 			}
+
 			return p.root, nil
 		default:
 		}
@@ -191,7 +194,9 @@ func (p *Parser[V]) Peek(ctx context.Context) *lexer.Token {
 	if p.next != nil {
 		return p.next
 	}
+
 	p.next = p.tokens.NextToken(ctx)
+
 	return p.next
 }
 
@@ -201,6 +206,7 @@ func (p *Parser[V]) Next(ctx context.Context) *lexer.Token {
 	l := p.Peek(ctx)
 	p.next = nil
 	p.token = l
+
 	return p.token
 }
 
@@ -222,6 +228,7 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 	n := p.NewNode(v)
 	p.node.Children = append(p.node.Children, n)
 	n.Parent = p.node
+
 	return n
 }
 
@@ -248,6 +255,7 @@ func (p *Parser[V]) Climb() *Node[V] {
 	if p.node.Parent != nil {
 		p.node = p.node.Parent
 	}
+
 	return n
 }
 
