@@ -21,23 +21,21 @@ import (
 	"errors"
 	"io"
 	"sync"
-
-	"github.com/ianlewis/lexparse/lexer"
 )
 
 // channelBufSize is the size of the buffer for the token channel used between
 // the lexer and parser.
 const channelBufSize = 1024
 
-// tokenChan implements the [lexer.TokenSource] interface by reading tokens from
+// tokenChan implements the [TokenSource] interface by reading tokens from
 // a channel.
 type tokenChan struct {
-	c   chan *lexer.Token
+	c   chan *Token
 	err error
 }
 
-// NextToken implements [lexer.TokenSource.NextToken].
-func (tc *tokenChan) NextToken(ctx context.Context) *lexer.Token {
+// NextToken implements [TokenSource.NextToken].
+func (tc *tokenChan) NextToken(ctx context.Context) *Token {
 	// Set the error if the context is done. Note that we do not return here.
 	// The same context is used for the lexer and the lexer should return an EOF
 	// after the context is canceled in that case.
@@ -55,7 +53,7 @@ func (tc *tokenChan) NextToken(ctx context.Context) *lexer.Token {
 // is returned.
 func LexParse[V comparable](
 	ctx context.Context,
-	lex lexer.Lexer,
+	lex Lexer,
 	startingState ParseState[V],
 ) (*Node[V], error) {
 	var (
@@ -68,7 +66,7 @@ func LexParse[V comparable](
 	ctx, cancel := context.WithCancel(ctx)
 
 	tokens := &tokenChan{
-		c:   make(chan *lexer.Token, channelBufSize),
+		c:   make(chan *Token, channelBufSize),
 		err: nil,
 	}
 
@@ -77,8 +75,8 @@ func LexParse[V comparable](
 	waitGrp.Add(1)
 
 	go func() {
-		t := &lexer.Token{}
-		for t.Type != lexer.TokenTypeEOF {
+		t := &Token{}
+		for t.Type != TokenTypeEOF {
 			t = lex.NextToken(ctx)
 			tokens.c <- t
 		}

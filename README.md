@@ -73,11 +73,11 @@ tokenize simple mathematical expressions.
 
 ```go
 r := strings.NewReader("1 + 3 * (4 - 2)")
-l := lexer.NewScanningLexer(r)
+l := lexparse.NewScanningLexer(r)
 
-t := &lexer.Token{}
+t := &lexparse.Token{}
 ctx := context.Background()
-for t.Type != lexer.TokenTypeEOF {
+for t.Type != lexparse.TokenTypeEOF {
     t = l.NextToken(ctx)
     fmt.Printf("%s\n", t)
 }
@@ -198,7 +198,7 @@ We will first need to define our token types.
 
 ```go
 const (
-    textType lexer.TokenType = iota
+    textType lexparse.TokenType = iota
     blockStartType
     blockEndType
     varStartType
@@ -217,7 +217,7 @@ advancing over the text.
 
 ```go
 // lexText tokenizes normal text.
-func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
+func lexText(_ context.Context, l *lexparse.CustomLexer) (lexparse.LexState, error) {
     for {
         p := l.PeekN(2)
         switch string(p) {
@@ -225,7 +225,7 @@ func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
             if l.Width() > 0 {
                 l.Emit(lexTypeText)
             }
-            return lexer.LexStateFn(lexCode), nil
+            return lexparse.LexStateFn(lexCode), nil
         default:
         }
 
@@ -252,11 +252,11 @@ to, and a reader for the input.
 
 ```go
 r := strings.NewReader(textString)
-l := lexer.NewCustomLexer(r, initState)
+l := lexparse.NewCustomLexer(r, initState)
 
-t := &lexer.Token{}
+t := &lexparse.Token{}
 ctx := context.Background()
-for t.Type != lexer.TokenTypeEOF {
+for t.Type != lexparse.TokenTypeEOF {
     t = l.NextToken(ctx)
     fmt.Printf("%s\n", t)
 }
@@ -418,17 +418,17 @@ The `Parser` is initialized with a channel to receive tokens from, and the
 initial parser state.
 
 ```go
-tokens := make(chan *lexer.Token, 1024)
+tokens := make(chan *lexparse.Token, 1024)
 parser := lexparse.NewParser(tokens, initState),
 
 go func() {
     // send some tokens to the channel.
-    tokens<-lexer.Token{
+    tokens<-lexparse.Token{
         Type: tokenTypeText,
         Value: "some",
     }
 
-    tokens<-lexer.Token{
+    tokens<-lexparse.Token{
         Type: tokenTypeText,
         Value: "token",
     }
@@ -453,7 +453,7 @@ r := runeio.NewReader(strings.NewReader(tmpl))
 
 tree, err := lexparse.LexParse(
     context.Background(),
-    lexer.NewCustomLexer(r, lexparse.LexStateFn(lexText)),
+    lexparse.NewCustomLexer(r, lexparse.LexStateFn(lexText)),
     lexparse.ParseStateFn(parseRoot), // Starting parser state
 )
 ```

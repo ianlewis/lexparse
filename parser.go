@@ -18,8 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-
-	"github.com/ianlewis/lexparse/lexer"
 )
 
 // Node is the structure for a single node in the parse tree.
@@ -29,7 +27,7 @@ type Node[V comparable] struct {
 	Value    V
 
 	// Start is the start position in the input where the value was found.
-	Start lexer.Position
+	Start Position
 }
 
 // ParseState is the state of the current parsing state machine. It defines the logic
@@ -80,15 +78,15 @@ func (s *stack[V]) pop() ParseState[V] {
 // TokenSource is an interface that defines a source of tokens for the parser.
 type TokenSource interface {
 	// NextToken returns the next token from the source. When tokens are
-	// exhausted, it returns a Token with Type set to [lexer.TokenTypeEOF].
-	NextToken(ctx context.Context) *lexer.Token
+	// exhausted, it returns a Token with Type set to [TokenTypeEOF].
+	NextToken(ctx context.Context) *Token
 }
 
 // NewParser creates a new Parser that reads from the tokens channel. The
 // parser is initialized with a root node with an empty value.
 func NewParser[V comparable](tokens TokenSource, startingState ParseState[V]) *Parser[V] {
 	root := &Node[V]{
-		Start: lexer.Position{
+		Start: Position{
 			Offset: 0,
 			Line:   1,
 			Column: 1,
@@ -126,10 +124,10 @@ type Parser[V comparable] struct {
 	node *Node[V]
 
 	// token is the current token in the stream.
-	token *lexer.Token
+	token *Token
 
 	// next is the next token in the stream.
-	next *lexer.Token
+	next *Token
 }
 
 // Parse builds a parse tree by repeatedly pulling [ParseState] objects from
@@ -190,7 +188,7 @@ func (p *Parser[V]) Root() *Node[V] {
 }
 
 // Peek returns the next token from the lexer without consuming it.
-func (p *Parser[V]) Peek(ctx context.Context) *lexer.Token {
+func (p *Parser[V]) Peek(ctx context.Context) *Token {
 	if p.next != nil {
 		return p.next
 	}
@@ -202,7 +200,7 @@ func (p *Parser[V]) Peek(ctx context.Context) *lexer.Token {
 
 // Next returns the next token from the lexer. This is the new current token
 // position.
-func (p *Parser[V]) Next(ctx context.Context) *lexer.Token {
+func (p *Parser[V]) Next(ctx context.Context) *Token {
 	l := p.Peek(ctx)
 	p.next = nil
 	p.token = l
@@ -235,7 +233,7 @@ func (p *Parser[V]) Node(v V) *Node[V] {
 // NewNode creates a new node at the current token position and returns it
 // without adding it to the tree.
 func (p *Parser[V]) NewNode(v V) *Node[V] {
-	var start lexer.Position
+	var start Position
 	if p.token != nil {
 		start = p.token.Start
 	}

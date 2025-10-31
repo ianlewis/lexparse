@@ -22,20 +22,18 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-
-	"github.com/ianlewis/lexparse/lexer"
 )
 
 type parseTokenState struct{}
 
 func (w *parseTokenState) Run(ctx context.Context, p *Parser[string]) error {
 	switch token := p.Next(ctx); token.Type {
-	case lexer.TokenTypeIdent:
+	case TokenTypeIdent:
 		p.Node(token.Value)
 		p.PushState(w)
 
 		return nil
-	case lexer.TokenTypeEOF:
+	case TokenTypeEOF:
 		return nil
 	default:
 		panic("unknown type")
@@ -53,7 +51,7 @@ func TestScannerLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		l := lexer.NewScanningLexer(r)
+		l := NewScanningLexer(r)
 
 		got, err := LexParse(ctx, l, &parseTokenState{})
 		if err != nil {
@@ -62,7 +60,7 @@ func TestScannerLexParse(t *testing.T) {
 
 		expectedRoot := addParent(
 			&Node[string]{
-				Start: lexer.Position{
+				Start: Position{
 					Offset: 0,
 					Line:   1,
 					Column: 1,
@@ -70,7 +68,7 @@ func TestScannerLexParse(t *testing.T) {
 				Children: []*Node[string]{
 					{
 						Value: "Hello",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 0,
 							Line:   1,
 							Column: 1,
@@ -78,7 +76,7 @@ func TestScannerLexParse(t *testing.T) {
 					},
 					{
 						Value: "World",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 6,
 							Line:   2,
 							Column: 1,
@@ -103,7 +101,7 @@ func (w *parseWordState) Run(ctx context.Context, p *Parser[string]) error {
 		p.PushState(w)
 
 		return nil
-	case lexer.TokenTypeEOF:
+	case TokenTypeEOF:
 		return nil
 	default:
 		panic("unknown type")
@@ -117,8 +115,8 @@ var (
 
 type lexErrState struct{}
 
-//nolint:ireturn // returning interface is required to satisfy lexer.LexState.
-func (e *lexErrState) Run(context.Context, *lexer.CustomLexer) (lexer.LexState, error) {
+//nolint:ireturn // returning interface is required to satisfy LexState.
+func (e *lexErrState) Run(context.Context, *CustomLexer) (LexState, error) {
 	return nil, errState
 }
 
@@ -140,7 +138,7 @@ func TestCustomLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		l := lexer.NewCustomLexer(r, &lexWordState{})
+		l := NewCustomLexer(r, &lexWordState{})
 
 		got, err := LexParse(ctx, l, &parseWordState{})
 		if err != nil {
@@ -149,7 +147,7 @@ func TestCustomLexParse(t *testing.T) {
 
 		expectedRoot := addParent(
 			&Node[string]{
-				Start: lexer.Position{
+				Start: Position{
 					Offset: 0,
 					Line:   1,
 					Column: 1,
@@ -157,7 +155,7 @@ func TestCustomLexParse(t *testing.T) {
 				Children: []*Node[string]{
 					{
 						Value: "Hello",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 0,
 							Line:   1,
 							Column: 1,
@@ -165,7 +163,7 @@ func TestCustomLexParse(t *testing.T) {
 					},
 					{
 						Value: "World!",
-						Start: lexer.Position{
+						Start: Position{
 							Offset: 6,
 							Line:   2,
 							Column: 1,
@@ -189,7 +187,7 @@ func TestCustomLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		l := lexer.NewCustomLexer(r, &lexErrState{})
+		l := NewCustomLexer(r, &lexErrState{})
 		_, got := LexParse(ctx, l, &parseErrState{})
 
 		want := errState
@@ -207,7 +205,7 @@ func TestCustomLexParse(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		l := lexer.NewCustomLexer(r, &lexWordState{})
+		l := NewCustomLexer(r, &lexWordState{})
 		_, got := LexParse(ctx, l, &parseErrState{})
 
 		want := errParse

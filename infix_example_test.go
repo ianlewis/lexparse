@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/ianlewis/lexparse"
-	"github.com/ianlewis/lexparse/lexer"
 )
 
 var (
@@ -67,7 +66,7 @@ func (n *exprNode) precedence() int {
 	}
 }
 
-func tokenErr(err error, t *lexer.Token) error {
+func tokenErr(err error, t *lexparse.Token) error {
 	return fmt.Errorf("%w: %q, line %d, column %d", err,
 		t.Value, t.Start.Line, t.Start.Column)
 }
@@ -98,7 +97,7 @@ func parseExpr(
 	var lhs *lexparse.Node[*exprNode]
 
 	switch token.Type {
-	case lexer.TokenTypeFloat, lexer.TokenTypeInt:
+	case lexparse.TokenTypeFloat, lexparse.TokenTypeInt:
 		num, err := strconv.ParseFloat(token.Value, 64)
 		if err != nil {
 			return nil, tokenErr(err, token)
@@ -121,7 +120,7 @@ func parseExpr(
 		if t2.Type != ')' {
 			return nil, tokenErr(errUnclosedParen, t2)
 		}
-	case lexer.TokenTypeEOF:
+	case lexparse.TokenTypeEOF:
 		return nil, tokenErr(io.ErrUnexpectedEOF, token)
 	default:
 		return nil, tokenErr(errUnexpectedIdentifier, token)
@@ -138,7 +137,7 @@ outerL:
 				typ:  nodeTypeOper,
 				oper: opToken.Value,
 			}
-		case lexer.TokenTypeEOF:
+		case lexparse.TokenTypeEOF:
 			break outerL
 		case ')':
 			if depth == 0 {
@@ -218,7 +217,7 @@ func Example_infixCalculator() {
 
 	t, err := lexparse.LexParse(
 		context.Background(),
-		lexer.NewScanningLexer(r),
+		lexparse.NewScanningLexer(r),
 		lexparse.ParseStateFn(pratt),
 	)
 	if err != nil {
