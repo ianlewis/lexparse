@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `Parser` now includes `NewNode` and `SetRoot` methods. These methods are
   useful for parsers that need to build the parse tree themselves instead of
   using the default methods on the `Parser`.
+- The `Lexer` API has been completely redesigned. A `Lexer` interface was added
+  and there are now two implementations: `ScanningLexer` and `CustomLexer`.
+  `ScanningLexer` is based on `text/scanner` and can handle many use cases.
+  `CustomLexer` allows for more custom lexing behavior to be implemented
+  ([#129](https://github.com/ianlewis/lexparse/issues/129)).
 
 ## [0.1.0] - 2025-02-24
 
