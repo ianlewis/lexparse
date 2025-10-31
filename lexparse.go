@@ -58,10 +58,13 @@ func LexParse[V comparable](
 	lex lexer.Lexer,
 	startingState ParseState[V],
 ) (*Node[V], error) {
-	var root *Node[V]
-	var lexErr error
-	var parseErr error
-	var waitGrp sync.WaitGroup
+	var (
+		root     *Node[V]
+		lexErr   error
+		parseErr error
+		waitGrp  sync.WaitGroup
+	)
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	tokens := &tokenChan{
@@ -72,19 +75,24 @@ func LexParse[V comparable](
 	p := NewParser(tokens, startingState)
 
 	waitGrp.Add(1)
+
 	go func() {
 		t := &lexer.Token{}
 		for t.Type != lexer.TokenTypeEOF {
 			t = lex.NextToken(ctx)
 			tokens.c <- t
 		}
+
 		lexErr = lex.Err()
+
 		waitGrp.Done()
 	}()
 
 	waitGrp.Add(1)
+
 	go func() {
 		root, parseErr = p.Parse(ctx)
+
 		cancel() // Indicate that parsing is done.
 		waitGrp.Done()
 	}()

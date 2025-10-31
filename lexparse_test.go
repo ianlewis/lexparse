@@ -33,6 +33,7 @@ func (w *parseTokenState) Run(ctx context.Context, p *Parser[string]) error {
 	case lexer.TokenTypeIdent:
 		p.Node(token.Value)
 		p.PushState(w)
+
 		return nil
 	case lexer.TokenTypeEOF:
 		return nil
@@ -53,6 +54,7 @@ func TestScannerLexParse(t *testing.T) {
 		defer cancel()
 
 		l := lexer.NewScanningLexer(r)
+
 		got, err := LexParse(ctx, l, &parseTokenState{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -99,6 +101,7 @@ func (w *parseWordState) Run(ctx context.Context, p *Parser[string]) error {
 	case wordType:
 		p.Node(token.Value)
 		p.PushState(w)
+
 		return nil
 	case lexer.TokenTypeEOF:
 		return nil
@@ -138,6 +141,7 @@ func TestCustomLexParse(t *testing.T) {
 		defer cancel()
 
 		l := lexer.NewCustomLexer(r, &lexWordState{})
+
 		got, err := LexParse(ctx, l, &parseWordState{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -187,6 +191,7 @@ func TestCustomLexParse(t *testing.T) {
 
 		l := lexer.NewCustomLexer(r, &lexErrState{})
 		_, got := LexParse(ctx, l, &parseErrState{})
+
 		want := errState
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)
@@ -204,6 +209,7 @@ func TestCustomLexParse(t *testing.T) {
 
 		l := lexer.NewCustomLexer(r, &lexWordState{})
 		_, got := LexParse(ctx, l, &parseErrState{})
+
 		want := errParse
 		if diff := cmp.Diff(want, got, cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("unexpected error (-want +got):\n%s", diff)

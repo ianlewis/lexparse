@@ -56,6 +56,7 @@ func (n *exprNode) precedence() int {
 	if n.typ != nodeTypeOper {
 		panic(fmt.Sprintf("node %v is not an operator node", n))
 	}
+
 	switch n.oper {
 	case "+", "-":
 		return 1
@@ -75,6 +76,7 @@ func tokenErr(err error, t *lexer.Token) error {
 func pratt(ctx context.Context, parser *lexparse.Parser[*exprNode]) error {
 	n, err := parseExpr(ctx, parser, 0, 0)
 	parser.SetRoot(n)
+
 	return err
 }
 
@@ -92,13 +94,16 @@ func parseExpr(
 	}
 
 	token := parser.Next(ctx)
+
 	var lhs *lexparse.Node[*exprNode]
+
 	switch token.Type {
 	case lexer.TokenTypeFloat, lexer.TokenTypeInt:
 		num, err := strconv.ParseFloat(token.Value, 64)
 		if err != nil {
 			return nil, tokenErr(err, token)
 		}
+
 		lhs = parser.NewNode(&exprNode{
 			typ: nodeTypeNum,
 			num: num,
@@ -109,7 +114,9 @@ func parseExpr(
 		if err != nil {
 			return nil, err
 		}
+
 		lhs = lhs2
+
 		t2 := parser.Next(ctx)
 		if t2.Type != ')' {
 			return nil, tokenErr(errUnclosedParen, t2)
@@ -123,6 +130,7 @@ func parseExpr(
 outerL:
 	for {
 		var opVal *exprNode
+
 		opToken := parser.Peek(ctx)
 		switch opToken.Type {
 		case '+', '-', '*', '/':
@@ -136,6 +144,7 @@ outerL:
 			if depth == 0 {
 				return nil, tokenErr(errUnexpectedParen, opToken)
 			}
+
 			break outerL
 		default:
 			return nil, tokenErr(errUnexpectedIdentifier, opToken)
@@ -172,14 +181,17 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 		if len(root.Children) != 2 {
 			return 0.0, fmt.Errorf("%w: invalid children: %v", errInvalidNode, root.Value)
 		}
+
 		left, err := Calculate(root.Children[0])
 		if err != nil {
 			return 0.0, err
 		}
+
 		right, err := Calculate(root.Children[1])
 		if err != nil {
 			return 0.0, err
 		}
+
 		switch root.Value.oper {
 		case "+":
 			return left + right, nil
@@ -191,6 +203,7 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 			if right == 0 {
 				return 0.0, errDivByZero
 			}
+
 			return left / right, nil
 		default:
 			return 0.0, fmt.Errorf("%w: operator: %s", errInvalidNode, root.Value.oper)
@@ -211,10 +224,12 @@ func Example_infixCalculator() {
 	if err != nil {
 		panic(err)
 	}
+
 	txt, err := Calculate(t)
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Print(txt)
 
 	// Output: 2.4157894736842107

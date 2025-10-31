@@ -99,6 +99,7 @@ func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 			if l.Width() > 0 {
 				l.Emit(lexTypeText)
 			}
+
 			return lexer.LexStateFn(lexCode), nil
 		}
 
@@ -108,6 +109,7 @@ func lexText(_ context.Context, l *lexer.CustomLexer) (lexer.LexState, error) {
 			if l.Width() > 0 {
 				l.Emit(lexTypeText)
 			}
+
 			return nil, io.EOF
 		}
 	}
@@ -192,6 +194,7 @@ func parseRoot(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	})
 
 	p.PushState(lexparse.ParseStateFn(parseSeq))
+
 	return nil
 }
 
@@ -322,6 +325,7 @@ func parseIf(_ context.Context, p *lexparse.Parser[*tmplNode]) error {
 	})
 
 	p.PushState(lexparse.ParseStateFn(parseSeq))
+
 	return nil
 }
 
@@ -399,6 +403,7 @@ func parseEndif(ctx context.Context, p *lexparse.Parser[*tmplNode]) error {
 			// Go back to parsing a sequence.
 			lexparse.ParseStateFn(parseSeq),
 		)
+
 		return nil
 	case lexer.TokenTypeEOF:
 		return fmt.Errorf("%w: looking for %q", io.ErrUnexpectedEOF, tokenEndif)
@@ -466,6 +471,7 @@ func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 	if _, ok := data["true"]; !ok {
 		data["true"] = "true"
 	}
+
 	if _, ok := data["false"]; !ok {
 		data["false"] = "false"
 	}
@@ -473,6 +479,7 @@ func Execute(root *lexparse.Node[*tmplNode], data map[string]string) (string, er
 	if err := execNode(root, data, &b); err != nil {
 		return "", err
 	}
+
 	return b.String(), nil
 }
 
@@ -514,6 +521,7 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, bldr *stri
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -538,10 +546,12 @@ func Example_templateEngine() {
 	if err != nil {
 		panic(err)
 	}
+
 	txt, err := Execute(t, map[string]string{"subject": "世界"})
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Print(txt)
 
 	// Output: Hello, 世界!
