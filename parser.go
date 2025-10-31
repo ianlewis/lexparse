@@ -159,6 +159,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 				break
 			}
 
+			//nolint:wrapcheck // no additional error context for error.
 			return p.root, err
 		}
 	}
