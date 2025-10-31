@@ -159,7 +159,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 				break
 			}
 
-			return p.Root(), err
+			return p.root, err
 		}
 	}
 

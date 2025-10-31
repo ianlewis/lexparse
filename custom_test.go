@@ -23,6 +23,7 @@ import (
 	"unicode"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 const (
@@ -868,6 +869,87 @@ func TestLexer_DiscardTo(t *testing.T) {
 
 		if got, want := customLexer.Token(), ""; got != want {
 			t.Errorf("Token: want: %q, got: %q", want, got)
+		}
+	})
+}
+
+func TestCustomLexer_NextToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parsing", func(t *testing.T) {
+		t.Parallel()
+
+		customLexer := NewCustomLexer(strings.NewReader("Hello World!"), &lexWordState{})
+
+		ctx := context.Background()
+
+		expectedToken := &Token{
+			Type:  wordType,
+			Value: "Hello",
+			Start: Position{
+				Offset: 0,
+				Line:   1,
+				Column: 1,
+			},
+			End: Position{
+				Offset: 5,
+				Line:   1,
+				Column: 6,
+			},
+		}
+
+		if diff := cmp.Diff(expectedToken, customLexer.NextToken(ctx)); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
+		}
+
+		if diff := cmp.Diff(nil, customLexer.Err()); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
+		}
+
+		expectedToken2 := &Token{
+			Type:  wordType,
+			Value: "World!",
+			Start: Position{
+				Offset: 6,
+				Line:   1,
+				Column: 7,
+			},
+			End: Position{
+				Offset: 12,
+				Line:   1,
+				Column: 13,
+			},
+		}
+
+		if diff := cmp.Diff(expectedToken2, customLexer.NextToken(ctx)); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
+		}
+
+		if diff := cmp.Diff(nil, customLexer.Err()); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
+		}
+
+		expectedToken3 := &Token{
+			Type:  TokenTypeEOF,
+			Value: "",
+			Start: Position{
+				Offset: 12,
+				Line:   1,
+				Column: 13,
+			},
+			End: Position{
+				Offset: 12,
+				Line:   1,
+				Column: 13,
+			},
+		}
+
+		if diff := cmp.Diff(expectedToken3, customLexer.NextToken(ctx)); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
+		}
+
+		if diff := cmp.Diff(io.EOF, customLexer.Err(), cmpopts.EquateErrors()); diff != "" {
+			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
 }

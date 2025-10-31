@@ -85,13 +85,7 @@ func (l *ScanningLexer) NextToken(_ context.Context) *Token {
 		return l.newToken(TokenTypeEOF)
 	}
 
-	tok := l.s.Scan()
-	switch tok {
-	case scanner.EOF:
-		return l.newToken(TokenTypeEOF)
-	default:
-		return l.newToken(TokenType(tok))
-	}
+	return l.newToken(TokenType(l.s.Scan()))
 }
 
 // Err implements [Lexer.Err]. It returns the first error encountered by
