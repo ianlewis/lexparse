@@ -524,3 +524,67 @@ func TestParser_Replace_root(t *testing.T) {
 		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
 }
+
+func TestNode_String(t *testing.T) {
+	t.Parallel()
+
+	node := &Node[string]{
+		Value: "root",
+		Start: Position{
+			Offset: 0,
+			Line:   1,
+			Column: 1,
+		},
+		Children: []*Node[string]{
+			{
+				Value: "child1",
+
+				Start: Position{
+					Offset: 1,
+					Line:   1,
+					Column: 2,
+				},
+				Children: []*Node[string]{
+					{
+						Value: "grandchild1",
+
+						Start: Position{
+							Offset: 2,
+							Line:   1,
+							Column: 3,
+						},
+					},
+				},
+			},
+			{
+				Value: "child2",
+				Start: Position{
+					Offset: 3,
+					Line:   1,
+					Column: 4,
+				},
+				Children: []*Node[string]{
+					{
+						Value: "grandchild2",
+						Start: Position{
+							Offset: 4,
+							Line:   1,
+							Column: 5,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	expected := `root (1:1)
+├── child1 (1:2)
+│   └── grandchild1 (1:3)
+└── child2 (1:4)
+    └── grandchild2 (1:5)
+`
+
+	if diff := cmp.Diff(expected, node.String()); diff != "" {
+		t.Errorf("Node.String() (-want, +got): \n%s", diff)
+	}
+}
