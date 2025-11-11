@@ -17,6 +17,7 @@ package lexparse
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -30,8 +31,42 @@ type Node[V comparable] struct {
 	Start Position
 }
 
-// ParseState is the state of the current parsing state machine. It defines the logic
-// to process the current state and returns the next state.
+func (n *Node[V]) String() string {
+	return fmtNode(n, nil)
+}
+
+func fmtNode[V comparable](node *Node[V], lastRank []bool) string {
+	nodeStr := ""
+
+	for i := range len(lastRank) - 1 {
+		if lastRank[i] {
+			nodeStr += "    "
+		} else {
+			nodeStr += "│   "
+		}
+	}
+
+	if len(lastRank) > 0 {
+		if lastRank[len(lastRank)-1] {
+			nodeStr += "└── "
+		} else {
+			nodeStr += "├── "
+		}
+	}
+
+	nodeStr += fmt.Sprintf("%v (%v)\n", node.Value, node.Start)
+	for i, child := range node.Children {
+		newLastRank := make([]bool, len(lastRank)+1)
+		copy(newLastRank, lastRank)
+		newLastRank[len(lastRank)] = i == len(node.Children)-1
+		nodeStr += fmtNode(child, newLastRank)
+	}
+
+	return nodeStr
+}
+
+// ParseState is the state of the current parsing state machine. It defines the
+// logic to process the current state and returns the next state.
 type ParseState[V comparable] interface {
 	// Run executes the logic at the current state, returning an error if one is
 	// encountered. Implementations are expected to add new [Node] objects to
