@@ -113,7 +113,7 @@ func (s *stack[V]) pop() ParseState[V] {
 // TokenSource is an interface that defines a source of tokens for the parser.
 type TokenSource interface {
 	// NextToken returns the next token from the source. When tokens are
-	// exhausted, it returns a Token with Type set to [TokenTypeEOF].
+	// exhausted, it returns a Token with Type set to TokenTypeEOF.
 	NextToken(ctx context.Context) *Token
 }
 

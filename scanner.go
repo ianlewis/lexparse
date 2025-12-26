@@ -78,7 +78,7 @@ func NewScanningLexer(r io.Reader) *ScanningLexer {
 	return &l
 }
 
-// NextToken implements [Lexer.NextToken]. It returns the next token from
+// NextToken implements Lexer.NextToken. It returns the next token from
 // the input stream.
 func (l *ScanningLexer) NextToken(_ context.Context) *Token {
 	if l.err != nil {
@@ -88,7 +88,7 @@ func (l *ScanningLexer) NextToken(_ context.Context) *Token {
 	return l.newToken(TokenType(l.s.Scan()))
 }
 
-// Err implements [Lexer.Err]. It returns the first error encountered by
+// Err implements Lexer.Err. It returns the first error encountered by
 // the lexer, if any.
 func (l *ScanningLexer) Err() error {
 	return l.err

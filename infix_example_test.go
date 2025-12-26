@@ -212,6 +212,10 @@ func Calculate(root *lexparse.Node[*exprNode]) (float64, error) {
 	}
 }
 
+// Example_infixCalculator demonstrates an infix expression calculator
+// using a Pratt parser. It makes use of the ScanningLexer to tokenize
+// the input expression and builds an expression tree that is then evaluated
+// using the Calculate function.
 func Example_infixCalculator() {
 	r := strings.NewReader(`6.1 * ( 2.8 + 3.2 ) / 7.6 - 2.4`)
 

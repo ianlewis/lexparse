@@ -134,7 +134,7 @@ func lexCode(_ context.Context, l *lexparse.CustomLexer) (lexparse.LexState, err
 	case symbolRegexp.MatchString(string(rn)):
 		return lexparse.LexStateFn(lexSymbol), nil
 	default:
-		return nil, fmt.Errorf("code: %w: %q; line: %d, column: %d", errRune,
+		return nil, fmt.Errorf("%w: %q; line: %d, column: %d", errRune,
 			rn, l.Pos().Line, l.Pos().Column)
 	}
 }
@@ -529,8 +529,8 @@ func execNode(root *lexparse.Node[*tmplNode], data map[string]string, bldr *stri
 // (e.g. `{{ var }}`) with data values for those variables.
 //
 // LexParse is used to lex and parse the template into a parse tree. This tree
-// can be passed with a data map to the Execute function to interpret the template
-// and retrieve a final result.
+// can be passed with a data map to the Execute function to interpret the
+// template and retrieve a final result.
 //
 // This example includes some best practices for error handling, such as
 // including line and column numbers in error messages.
