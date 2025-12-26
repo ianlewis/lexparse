@@ -75,14 +75,14 @@ func (t Token) String() string {
 }
 
 // Lexer is an interface that defines the methods for a lexer that tokenizes
-// input streams. It reads from an input stream and emits [Token]s.
+// input streams. It reads from an input stream and emits tokens.
 type Lexer interface {
 	// NextToken returns the next token from the input. If there are no more
 	// tokens, the context is canceled, or an error occurs, it returns a Token
-	// with Type set to [TokenTypeEOF].
+	// with Type set to TokenTypeEOF.
 	NextToken(ctx context.Context) *Token
 
 	// Err returns the error encountered by the lexer, if any. If the error
-	// encountered is [io.EOF], it will return nil.
+	// encountered is io.EOF, it will return nil.
 	Err() error
 }
