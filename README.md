@@ -35,6 +35,18 @@ You can install the library into your project using `go get`.
 go get github.com/ianlewis/lexparse
 ```
 
+## Examples
+
+The repository includes runnable examples that show how to use different parts
+of the library:
+
+- [`infix_example_test.go`](./infix_example_test.go): Tokenize and parse simple
+  infix math expressions.
+- [`ini_example_test.go`](./ini_example_test.go): Parse a small INI-style
+  configuration format.
+- [`template_example_test.go`](./template_example_test.go): Build a custom
+  lexer/parser flow for template syntax.
+
 ## Lexing API
 
 The API for `lexparse` is broken up into a lexing API and an optional parsing
