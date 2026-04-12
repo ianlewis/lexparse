@@ -15,6 +15,7 @@
 package lexparse
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -114,7 +115,7 @@ var (
 type lexErrState struct{}
 
 //nolint:ireturn // returning interface is required to satisfy LexState.
-func (e *lexErrState) Run(*CustomLexerContext) (LexState, error) {
+func (e *lexErrState) Run(context.Context, *CustomLexerCursor) (LexState, error) {
 	return nil, errState
 }
 
