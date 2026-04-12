@@ -130,7 +130,7 @@ in addition to the underlying reader's position. When the token has been fully
 processed it can be emitted to a channel for further processing by the `Parser`.
 
 Developers implement the token processing portion of the lexer by implementing
-`LexState` interface for each relevant lexer state. A `CustomLexerContext` is
+`LexState` interface for each relevant lexer state. A `CustomLexerCursor` is
 passed to each `LexState` during processing and includes a number of methods
 that can be used to advance through the input text.
 
@@ -211,7 +211,7 @@ type LexState interface {
     // Run returns the next state to transition to or an error. If the returned
     // next state is nil or the returned error is io.EOF then the Lexer
     // finishes processing normally.
-    Run(*CustomLexerContext) (LexState, error)
+    Run(context.Context, *CustomLexerCursor) (LexState, error)
 }
 ```
 
@@ -238,23 +238,23 @@ advancing over the text.
 
 ```go
 // lexText tokenizes normal text.
-func lexText(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
+func lexText(ctx context.Context, c *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
     for {
-        p := ctx.PeekN(2)
+        p := c.PeekN(2)
         switch string(p) {
         case tokenBlockStart, tokenVarStart:
-            if ctx.Width() > 0 {
-                ctx.Emit(lexTypeText)
+            if c.Width() > 0 {
+                c.Emit(lexTypeText)
             }
             return lexparse.LexStateFn(lexCode), nil
         default:
         }
 
         // Advance the input.
-        if !ctx.Advance() {
+        if !c.Advance() {
             // End of input. Emit the text up to this point.
-            if ctx.Width() > 0 {
-                ctx.Emit(lexTypeText)
+            if c.Width() > 0 {
+                c.Emit(lexTypeText)
             }
             return nil, nil
         }

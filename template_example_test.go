@@ -106,22 +106,22 @@ func lexTokenErr(err error, t *lexparse.Token) error {
 // lexText tokenizes normal text.
 //
 //nolint:ireturn // returning interface is required to satisfy lexparse.LexState.
-func lexText(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
+func lexText(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
 	for {
-		p := string(ctx.PeekN(2))
+		p := string(cursor.PeekN(2))
 		if p == tokenBlockStart || p == tokenVarStart {
-			if ctx.Width() > 0 {
-				ctx.Emit(lexTypeText)
+			if cursor.Width() > 0 {
+				cursor.Emit(lexTypeText)
 			}
 
 			return lexparse.LexStateFn(lexCode), nil
 		}
 
 		// Advance the input.
-		if !ctx.Advance() {
+		if !cursor.Advance() {
 			// End of input. Emit the text up to this point.
-			if ctx.Width() > 0 {
-				ctx.Emit(lexTypeText)
+			if cursor.Width() > 0 {
+				cursor.Emit(lexTypeText)
 			}
 
 			return nil, io.EOF
@@ -132,17 +132,17 @@ func lexText(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
 // lexCode tokenizes template code.
 //
 //nolint:ireturn // returning interface is required to satisfy lexparse.LexState.
-func lexCode(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
+func lexCode(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
 	// Consume whitespace and discard it.
 	// TODO(#94): use backtracking
-	for unicode.IsSpace(ctx.Peek()) {
-		if !ctx.Discard() {
+	for unicode.IsSpace(cursor.Peek()) {
+		if !cursor.Discard() {
 			// End of input
 			return nil, io.EOF
 		}
 	}
 
-	rn := ctx.Peek()
+	rn := cursor.Peek()
 	switch {
 	case idenRegexp.MatchString(string(rn)):
 		return lexparse.LexStateFn(lexIden), nil
@@ -150,21 +150,21 @@ func lexCode(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
 		return lexparse.LexStateFn(lexSymbol), nil
 	default:
 		return nil, fmt.Errorf("%w: %q; line: %d, column: %d", errRune,
-			rn, ctx.Pos().Line, ctx.Pos().Column)
+			rn, cursor.Pos().Line, cursor.Pos().Column)
 	}
 }
 
 // lexIden tokenizes identifiers (e.g. variable names).
 //
 //nolint:ireturn // returning interface is required to satisfy lexparse.LexState.
-func lexIden(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
+func lexIden(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
 	for {
-		if rn := ctx.Peek(); !idenRegexp.MatchString(string(rn)) {
-			ctx.Emit(lexTypeIdentifier)
+		if rn := cursor.Peek(); !idenRegexp.MatchString(string(rn)) {
+			cursor.Emit(lexTypeIdentifier)
 			return lexparse.LexStateFn(lexCode), nil
 		}
 
-		if !ctx.Advance() {
+		if !cursor.Advance() {
 			return nil, io.EOF
 		}
 	}
@@ -173,29 +173,29 @@ func lexIden(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
 // lexSymbol tokenizes template symbols (e.g. {%, {{, }}, %}).
 //
 //nolint:ireturn // returning interface is required to satisfy lexparse.LexState.
-func lexSymbol(ctx *lexparse.CustomLexerContext) (lexparse.LexState, error) {
+func lexSymbol(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
 	for {
-		switch ctx.Token() {
+		switch cursor.Token() {
 		case tokenVarStart:
-			ctx.Emit(lexTypeVarStart)
+			cursor.Emit(lexTypeVarStart)
 			return lexparse.LexStateFn(lexCode), nil
 		case tokenVarEnd:
-			ctx.Emit(lexTypeVarEnd)
+			cursor.Emit(lexTypeVarEnd)
 			return lexparse.LexStateFn(lexText), nil
 		case tokenBlockStart:
-			ctx.Emit(lexTypeBlockStart)
+			cursor.Emit(lexTypeBlockStart)
 			return lexparse.LexStateFn(lexCode), nil
 		case tokenBlockEnd:
-			ctx.Emit(lexTypeBlockEnd)
+			cursor.Emit(lexTypeBlockEnd)
 			return lexparse.LexStateFn(lexText), nil
 		default:
-			if rn := ctx.Peek(); !symbolRegexp.MatchString(string(rn)) {
+			if rn := cursor.Peek(); !symbolRegexp.MatchString(string(rn)) {
 				return nil, fmt.Errorf("symbol: %w: %q; line: %d, column: %d",
-					errRune, rn, ctx.Pos().Line, ctx.Pos().Column)
+					errRune, rn, cursor.Pos().Line, cursor.Pos().Column)
 			}
 		}
 
-		if !ctx.Advance() {
+		if !cursor.Advance() {
 			return nil, io.EOF
 		}
 	}
