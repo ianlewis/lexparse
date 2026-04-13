@@ -26,11 +26,11 @@ import (
 
 type parseTokenState struct{}
 
-func (w *parseTokenState) Run(ctx *ParserContext[string]) error {
-	switch token := ctx.Next(); token.Type {
+func (w *parseTokenState) Run(ctx context.Context, cur *ParseCursor[string]) error {
+	switch token := cur.Next(ctx); token.Type {
 	case TokenTypeIdent:
-		ctx.Node(token.Value)
-		ctx.PushState(w)
+		cur.Node(token.Value)
+		cur.PushState(w)
 
 		return nil
 	case TokenTypeEOF:
@@ -93,11 +93,11 @@ func TestScannerLexParse(t *testing.T) {
 
 type parseWordState struct{}
 
-func (w *parseWordState) Run(ctx *ParserContext[string]) error {
-	switch token := ctx.Next(); token.Type {
+func (w *parseWordState) Run(ctx context.Context, cur *ParseCursor[string]) error {
+	switch token := cur.Next(ctx); token.Type {
 	case wordType:
-		ctx.Node(token.Value)
-		ctx.PushState(w)
+		cur.Node(token.Value)
+		cur.PushState(w)
 
 		return nil
 	case TokenTypeEOF:
@@ -115,14 +115,14 @@ var (
 type lexErrState struct{}
 
 //nolint:ireturn // returning interface is required to satisfy LexState.
-func (e *lexErrState) Run(context.Context, *CustomLexerCursor) (LexState, error) {
+func (e *lexErrState) Run(context.Context, *LexCursor) (LexState, error) {
 	return nil, errState
 }
 
 type parseErrState struct{}
 
-func (e *parseErrState) Run(ctx *ParserContext[string]) error {
-	_ = ctx.Next()
+func (e *parseErrState) Run(ctx context.Context, cur *ParseCursor[string]) error {
+	_ = cur.Next(ctx)
 	return errParse
 }
 

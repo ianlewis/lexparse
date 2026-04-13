@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- Renamed `CustomLexerContext` to `CustomLexerCursor` and separated it from the
+- Renamed `CustomLexerContext` to `LexCursor` and separated it from the
+  `context.Context` type.
+- Renamed `ParserContext` to `ParseCursor` and separated it from the
   `context.Context` type.
 
 ## [0.3.0] - 2026-01-25

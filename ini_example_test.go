@@ -87,12 +87,12 @@ var (
 // lexINI is the initial lexer state for INI files.
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func lexINI(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
+func lexINI(_ context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
 	for {
-		rn := cursor.Peek()
+		rn := cur.Peek()
 		switch rn {
 		case ' ', '\t', '\r', '\n':
-			cursor.Discard()
+			cur.Discard()
 		case '[', ']', '=':
 			return lexparse.LexStateFn(lexINIOper), nil
 		case ';', '#':
@@ -108,9 +108,9 @@ func lexINI(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.Lex
 // lexINIOper lexes an operator token.
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func lexINIOper(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
-	oper := cursor.NextRune()
-	cursor.Emit(lexINITypeOper)
+func lexINIOper(_ context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
+	oper := cur.NextRune()
+	cur.Emit(lexINITypeOper)
 
 	if oper == '=' {
 		return lexparse.LexStateFn(lexINIValue), nil
@@ -122,9 +122,9 @@ func lexINIOper(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse
 // lexINIIden lexes an identifier token (section name or property key).
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func lexINIIden(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
-	if next := cursor.Find([]string{"]", "="}); next != "" {
-		cursor.Emit(lexINITypeIden)
+func lexINIIden(_ context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
+	if next := cur.Find([]string{"]", "="}); next != "" {
+		cur.Emit(lexINITypeIden)
 		return lexparse.LexStateFn(lexINIOper), nil
 	}
 
@@ -134,9 +134,9 @@ func lexINIIden(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse
 // lexINIValue lexes a property value token.
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func lexINIValue(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
-	cursor.Find([]string{";", "\n"})
-	cursor.Emit(lexINITypeValue)
+func lexINIValue(_ context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
+	cur.Find([]string{";", "\n"})
+	cur.Emit(lexINITypeValue)
 
 	return lexparse.LexStateFn(lexINI), nil
 }
@@ -144,9 +144,9 @@ func lexINIValue(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexpars
 // lexINIComment lexes a comment token.
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func lexINIComment(_ context.Context, cursor *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
-	cursor.Find([]string{"\n"})
-	cursor.Emit(lexINITypeComment)
+func lexINIComment(_ context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
+	cur.Find([]string{"\n"})
+	cur.Emit(lexINITypeComment)
 
 	return lexparse.LexStateFn(lexINI), nil
 }
@@ -158,35 +158,35 @@ func iniTokenErr(err error, t *lexparse.Token) error {
 }
 
 // parseINIInit is the initial parser state for INI files.
-func parseINIInit(ctx *lexparse.ParserContext[*iniNode]) error {
+func parseINIInit(_ context.Context, cur *lexparse.ParseCursor[*iniNode]) error {
 	// Replace the root node with a new root node.
-	_ = ctx.Replace(&iniNode{
+	_ = cur.Replace(&iniNode{
 		typ: iniNodeTypeRoot,
 	})
 
 	// Create the empty section node for the global section.
-	_ = ctx.Push(&iniNode{
+	_ = cur.Push(&iniNode{
 		typ:         iniNodeTypeSection,
 		sectionName: "",
 	})
 
-	ctx.PushState(lexparse.ParseStateFn(parseINI))
+	cur.PushState(lexparse.ParseStateFn(parseINI))
 
 	return nil
 }
 
 // parseINI parses the top-level structure of an INI file.
-func parseINI(ctx *lexparse.ParserContext[*iniNode]) error {
-	t := ctx.Peek()
+func parseINI(ctx context.Context, cur *lexparse.ParseCursor[*iniNode]) error {
+	t := cur.Peek(ctx)
 
 	switch t.Type {
 	case lexINITypeOper:
-		ctx.PushState(lexparse.ParseStateFn(parseSection))
+		cur.PushState(lexparse.ParseStateFn(parseSection))
 	case lexINITypeIden:
-		ctx.PushState(lexparse.ParseStateFn(parseProperty))
+		cur.PushState(lexparse.ParseStateFn(parseProperty))
 	case lexINITypeComment:
-		_ = ctx.Next() // Discard comment
-		ctx.PushState(lexparse.ParseStateFn(parseINI))
+		_ = cur.Next(ctx) // Discard comment
+		cur.PushState(lexparse.ParseStateFn(parseINI))
 	case lexparse.TokenTypeEOF:
 		return nil
 	default:
@@ -197,18 +197,18 @@ func parseINI(ctx *lexparse.ParserContext[*iniNode]) error {
 }
 
 // parseSection parses a section header.
-func parseSection(ctx *lexparse.ParserContext[*iniNode]) error {
-	openBracket := ctx.Next()
+func parseSection(ctx context.Context, cur *lexparse.ParseCursor[*iniNode]) error {
+	openBracket := cur.Next(ctx)
 	if openBracket.Type != lexINITypeOper || openBracket.Value != "[" {
 		return iniTokenErr(errINIIdentifier, openBracket)
 	}
 
-	sectionToken := ctx.Next()
+	sectionToken := cur.Next(ctx)
 	if sectionToken.Type != lexINITypeIden {
 		return iniTokenErr(errINIIdentifier, sectionToken)
 	}
 
-	closeBracket := ctx.Next()
+	closeBracket := cur.Next(ctx)
 	if closeBracket.Type != lexINITypeOper || closeBracket.Value != "]" {
 		return iniTokenErr(errINIIdentifier, closeBracket)
 	}
@@ -222,20 +222,20 @@ func parseSection(ctx *lexparse.ParserContext[*iniNode]) error {
 
 	// Create a new node for the section and push it onto the parse tree.
 	// The current node is now the new section node.
-	_ = ctx.Climb()
-	_ = ctx.Push(&iniNode{
+	_ = cur.Climb()
+	_ = cur.Push(&iniNode{
 		typ:         iniNodeTypeSection,
 		sectionName: sectionName,
 	})
 
-	ctx.PushState(lexparse.ParseStateFn(parseINI))
+	cur.PushState(lexparse.ParseStateFn(parseINI))
 
 	return nil
 }
 
 // parseProperty parses a property key-value pair.
-func parseProperty(ctx *lexparse.ParserContext[*iniNode]) error {
-	keyToken := ctx.Next()
+func parseProperty(ctx context.Context, cur *lexparse.ParseCursor[*iniNode]) error {
+	keyToken := cur.Next(ctx)
 	if keyToken.Type != lexINITypeIden {
 		return iniTokenErr(errINIIdentifier, keyToken)
 	}
@@ -247,24 +247,24 @@ func parseProperty(ctx *lexparse.ParserContext[*iniNode]) error {
 		return iniTokenErr(errINIPropertyName, keyToken)
 	}
 
-	eqToken := ctx.Next()
+	eqToken := cur.Next(ctx)
 	if eqToken.Type != lexINITypeOper || eqToken.Value != "=" {
 		return iniTokenErr(errINIIdentifier, eqToken)
 	}
 
-	valueToken := ctx.Next()
+	valueToken := cur.Next(ctx)
 	if valueToken.Type != lexINITypeValue {
 		return iniTokenErr(errINIIdentifier, valueToken)
 	}
 
 	// Create a new node for the property and add it to the current section.
-	ctx.Node(&iniNode{
+	cur.Node(&iniNode{
 		typ:           iniNodeTypeProperty,
 		propertyName:  keyName,
 		propertyValue: strings.TrimSpace(valueToken.Value),
 	})
 
-	ctx.PushState(lexparse.ParseStateFn(parseINI))
+	cur.PushState(lexparse.ParseStateFn(parseINI))
 
 	return nil
 }

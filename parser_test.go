@@ -40,9 +40,9 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 
 	l := NewCustomLexer(strings.NewReader(input), &lexWordState{})
 
-	parser := NewParser(l, ParseStateFn(func(ctx *ParserContext[string]) error {
+	parser := NewParser(l, ParseStateFn(func(ctx context.Context, cur *ParseCursor[string]) error {
 		for {
-			token := ctx.Next()
+			token := cur.Next(ctx)
 			switch token.Type {
 			case wordType:
 				// OK
@@ -55,13 +55,13 @@ func testParse(t *testing.T, input string) (*Node[string], error) {
 			switch token.Value {
 			case "climb":
 				// Climb the tree without adding a node.
-				_ = ctx.Climb()
+				_ = cur.Climb()
 			case "replace":
-				_ = ctx.Replace(token.Value)
+				_ = cur.Replace(token.Value)
 			case "push":
-				_ = ctx.Push(token.Value)
+				_ = cur.Push(token.Value)
 			default:
-				ctx.Node(token.Value)
+				cur.Node(token.Value)
 			}
 		}
 	}))
@@ -163,19 +163,18 @@ func TestParser_parse_op2(t *testing.T) {
 	}
 }
 
-func TestParserContext_NextPeek(t *testing.T) {
+func TestParseCursor_NextPeek(t *testing.T) {
 	t.Parallel()
 
 	input := "A B C"
 	l := NewCustomLexer(strings.NewReader(input), &lexWordState{})
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](l, nil),
-	}
+	parser := NewParser[string](l, nil)
+	cur := NewParseCursor[string](parser)
+	ctx := t.Context()
 
 	// Expect to read the first token `A`
-	tokenA := ctx.Next()
+	tokenA := cur.Next(ctx)
 
 	wanttokenA := &Token{
 		Type:  wordType,
@@ -195,7 +194,7 @@ func TestParserContext_NextPeek(t *testing.T) {
 		t.Fatalf("Next: (-want, +got): \n%s", diff)
 	}
 
-	peekTokenB := ctx.Peek()
+	peekTokenB := cur.Peek(ctx)
 
 	wantTokenB := &Token{
 		Type:  wordType,
@@ -216,12 +215,12 @@ func TestParserContext_NextPeek(t *testing.T) {
 	}
 
 	// Expect to read the second token "B" because it was not consumed
-	tokenB := ctx.Next()
+	tokenB := cur.Next(ctx)
 	if diff := cmp.Diff(wantTokenB, tokenB); diff != "" {
 		t.Fatalf("Peek: (-want, +got): \n%s", diff)
 	}
 
-	tokenC := ctx.Next()
+	tokenC := cur.Next(ctx)
 
 	wantTokenC := &Token{
 		Type:  wordType,
@@ -242,7 +241,7 @@ func TestParserContext_NextPeek(t *testing.T) {
 	}
 
 	// The expected end of tokens
-	niltoken := ctx.Next()
+	niltoken := cur.Next(ctx)
 
 	tokenEOF := &Token{
 		Type:  TokenTypeEOF,
@@ -263,15 +262,13 @@ func TestParserContext_NextPeek(t *testing.T) {
 	}
 }
 
-func TestParserContext_Node(t *testing.T) {
+func TestParseCursor_Node(t *testing.T) {
 	t.Parallel()
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](nil, nil),
-	}
+	parser := NewParser[string](nil, nil)
+	cur := NewParseCursor[string](parser)
 
-	child1 := ctx.Node("A")
+	child1 := cur.Node("A")
 	expectedRootA := addParent(&Node[string]{
 		Start: Position{
 			Offset: 0,
@@ -289,11 +286,11 @@ func TestParserContext_Node(t *testing.T) {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
 	// Current node is still set to root.
-	if diff := cmp.Diff(ctx.p.root, ctx.p.node); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.p.node); diff != "" {
 		t.Errorf("p.node: (-want, +got): \n%s", diff)
 	}
 
-	child2 := ctx.Node("B")
+	child2 := cur.Node("B")
 	expectedRootB := addParent(&Node[string]{
 		Start: Position{
 			Offset: 0,
@@ -314,24 +311,22 @@ func TestParserContext_Node(t *testing.T) {
 		t.Fatalf("Node: (-want, +got): \n%s", diff)
 	}
 	// Current node is still set to root.
-	if diff := cmp.Diff(ctx.p.root, ctx.p.node); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.p.node); diff != "" {
 		t.Errorf("p.node: (-want, +got): \n%s", diff)
 	}
 
-	if diff := cmp.Diff(expectedRootB, ctx.p.root); diff != "" {
+	if diff := cmp.Diff(expectedRootB, cur.p.root); diff != "" {
 		t.Fatalf("Node: parser.root (-want, +got): \n%s", diff)
 	}
 }
 
-func TestParserContext_ClimbPos(t *testing.T) {
+func TestParseCursor_ClimbPos(t *testing.T) {
 	t.Parallel()
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](nil, nil),
-	}
+	parser := NewParser[string](nil, nil)
+	cur := NewParseCursor[string](parser)
 
-	ctx.p.root = addParent(
+	cur.p.root = addParent(
 		&Node[string]{
 			Start: Position{
 				Offset: 0,
@@ -351,55 +346,53 @@ func TestParserContext_ClimbPos(t *testing.T) {
 		},
 	)
 	// Current node is Node B
-	ctx.p.node = ctx.p.root.Children[0].Children[0]
+	cur.p.node = cur.p.root.Children[0].Children[0]
 
 	// Climb returns Node B
-	if diff := cmp.Diff(ctx.p.root.Children[0].Children[0], ctx.Climb()); diff != "" {
+	if diff := cmp.Diff(cur.p.root.Children[0].Children[0], cur.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to Node A
-	if diff := cmp.Diff(ctx.p.root.Children[0], ctx.p.node); diff != "" {
+	if diff := cmp.Diff(cur.p.root.Children[0], cur.p.node); diff != "" {
 		t.Errorf("parser.node: (-want, +got): \n%s", diff)
 	}
 	// Pos returns Node A
-	if diff := cmp.Diff(ctx.p.root.Children[0], ctx.Pos()); diff != "" {
+	if diff := cmp.Diff(cur.p.root.Children[0], cur.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
 	// Climb returns Node A
-	if diff := cmp.Diff(ctx.p.root.Children[0], ctx.Climb()); diff != "" {
+	if diff := cmp.Diff(cur.p.root.Children[0], cur.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to root node.
-	if diff := cmp.Diff(ctx.p.root, ctx.p.node); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.p.node); diff != "" {
 		t.Errorf("parser.node (-want, +got): \n%s", diff)
 	}
 	// Pos returns root node.
-	if diff := cmp.Diff(ctx.p.root, ctx.Pos()); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 
 	// Climb returns root node.
-	if diff := cmp.Diff(ctx.p.root, ctx.Climb()); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.Climb()); diff != "" {
 		t.Errorf("Climb: (-want, +got): \n%s", diff)
 	}
 	// Current node is set to root node.
-	if diff := cmp.Diff(ctx.p.root, ctx.p.node); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.p.node); diff != "" {
 		t.Errorf("parser.node (-want, +got): \n%s", diff)
 	}
 	// Pos returns root node.
-	if diff := cmp.Diff(ctx.p.root, ctx.Pos()); diff != "" {
+	if diff := cmp.Diff(cur.p.root, cur.Pos()); diff != "" {
 		t.Errorf("Pos: (-want, +got): \n%s", diff)
 	}
 }
 
-func TestParserContext_Push(t *testing.T) {
+func TestParseCursor_Push(t *testing.T) {
 	t.Parallel()
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](nil, nil),
-	}
+	parser := NewParser[string](nil, nil)
+	cur := NewParseCursor[string](parser)
 
 	valA := "A"
 
@@ -415,15 +408,15 @@ func TestParserContext_Push(t *testing.T) {
 			},
 		},
 	})
-	if diff := cmp.Diff(expectedRootA.Children[0], ctx.Push(valA)); diff != "" {
+	if diff := cmp.Diff(expectedRootA.Children[0], cur.Push(valA)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valA, diff)
 	}
 
-	if diff := cmp.Diff(expectedRootA.Children[0], ctx.p.node); diff != "" {
+	if diff := cmp.Diff(expectedRootA.Children[0], cur.p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
 
-	if diff := cmp.Diff(expectedRootA, ctx.p.root); diff != "" {
+	if diff := cmp.Diff(expectedRootA, cur.p.root); diff != "" {
 		t.Errorf("parser.root (-want, +got): \n%s", diff)
 	}
 
@@ -446,15 +439,15 @@ func TestParserContext_Push(t *testing.T) {
 			},
 		},
 	})
-	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], ctx.Push(valB)); diff != "" {
+	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], cur.Push(valB)); diff != "" {
 		t.Errorf("Push(%q): (-want, +got): \n%s", valB, diff)
 	}
 
-	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], ctx.p.node); diff != "" {
+	if diff := cmp.Diff(expectedRootB.Children[0].Children[0], cur.p.node); diff != "" {
 		t.Errorf("parser.node (-want, +got): \n%s", diff)
 	}
 
-	if diff := cmp.Diff(expectedRootB, ctx.p.root); diff != "" {
+	if diff := cmp.Diff(expectedRootB, cur.p.root); diff != "" {
 		t.Errorf("parser.root (-want, +got): \n%s", diff)
 	}
 }
@@ -462,12 +455,10 @@ func TestParserContext_Push(t *testing.T) {
 func TestParser_Replace(t *testing.T) {
 	t.Parallel()
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](nil, nil),
-	}
+	parser := NewParser[string](nil, nil)
+	cur := NewParseCursor[string](parser)
 
-	ctx.p.root = addParent(&Node[string]{
+	cur.p.root = addParent(&Node[string]{
 		Children: []*Node[string]{
 			{
 				Value: "A",
@@ -481,11 +472,11 @@ func TestParser_Replace(t *testing.T) {
 	})
 
 	// Current node is Node A
-	ctx.p.node = ctx.p.root.Children[0]
+	cur.p.node = cur.p.root.Children[0]
 
 	// Replace Node A with C
 	valC := "C"
-	if diff := cmp.Diff("A", ctx.Replace(valC)); diff != "" {
+	if diff := cmp.Diff("A", cur.Replace(valC)); diff != "" {
 		t.Errorf("Replace(%q): (-want, +got): \n%s", valC, diff)
 	}
 
@@ -503,26 +494,24 @@ func TestParser_Replace(t *testing.T) {
 	})
 
 	// Current node is set to Node `C`.
-	if diff := cmp.Diff(expectedRoot.Children[0], ctx.p.node); diff != "" {
+	if diff := cmp.Diff(expectedRoot.Children[0], cur.p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, ctx.p.root); diff != "" {
+	if diff := cmp.Diff(expectedRoot, cur.p.root); diff != "" {
 		t.Errorf("parser.root (-want, +got): \n%s", diff)
 	}
 }
 
-func TestParserContext_Replace_root(t *testing.T) {
+func TestParseCursor_Replace_root(t *testing.T) {
 	t.Parallel()
 
-	ctx := &ParserContext[string]{
-		Context: context.Background(),
-		p:       NewParser[string](nil, nil),
-	}
+	parser := NewParser[string](nil, nil)
+	cur := NewParseCursor[string](parser)
 
 	// Replace root node with A
 	valA := "A"
-	if diff := cmp.Diff("", ctx.Replace(valA)); diff != "" {
+	if diff := cmp.Diff("", cur.Replace(valA)); diff != "" {
 		t.Errorf("Replace(%q): (-want, +got): \n%s", valA, diff)
 	}
 
@@ -531,11 +520,11 @@ func TestParserContext_Replace_root(t *testing.T) {
 	}
 
 	// Current node is set to root node.
-	if diff := cmp.Diff(expectedRoot, ctx.p.node); diff != "" {
+	if diff := cmp.Diff(expectedRoot, cur.p.node); diff != "" {
 		t.Errorf("p.node (-want, +got): \n%s", diff)
 	}
 	// Full tree has expected values.
-	if diff := cmp.Diff(expectedRoot, ctx.p.root); diff != "" {
+	if diff := cmp.Diff(expectedRoot, cur.p.root); diff != "" {
 		t.Errorf("p.root (-want, +got): \n%s", diff)
 	}
 }
