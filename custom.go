@@ -56,8 +56,8 @@ func LexStateFn(f func(context.Context, *LexCursor) (LexState, error)) LexState 
 	return &lexFnState{f}
 }
 
-// LexCursor is a type that allows for processing the input for the
-// CustomLexer. It provides methods to advance the reader, emit tokens, and
+// LexCursor is a type that allows for processing the input for a
+// [CustomLexer]. It provides methods to advance the reader, emit tokens, and
 // manage the current token being processed. It is designed to be used within
 // the [LexState.Run] method to allow the state implementation to interact with
 // the lexer without exposing the full CustomLexer implementation.
@@ -65,7 +65,7 @@ type LexCursor struct {
 	l *CustomLexer
 }
 
-// NewLexCursor creates a new CustomLexerCursor.
+// NewLexCursor creates a new [LexCursor].
 func NewLexCursor(l *CustomLexer) *LexCursor {
 	return &LexCursor{
 		l: l,

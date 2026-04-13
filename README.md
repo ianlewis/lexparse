@@ -336,9 +336,10 @@ manipulate the AST.
 // logic to process the current state and returns the next state.
 type ParseState[V comparable] interface {
     // Run executes the logic at the current state, returning an error if one is
-    // encountered. Implementations are expected to add new [Node] objects to
-    // the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
-    // state should be pushed onto the stack as needed using [Parser.PushState].
+    // encountered. Implementations are expected to add new Node objects to
+    // the AST using ParseCursor.Push or ParseCursor.Node. As necessary, new
+    // parser state should be pushed onto the stack as needed using
+    // Parser.PushState.
     Run(ctx context.Context, cur *ParseCursor[V]) error
 }
 ```

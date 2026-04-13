@@ -71,9 +71,10 @@ func fmtNode[V comparable](node *Node[V], lastRank []bool) string {
 // logic to process the current state and returns the next state.
 type ParseState[V comparable] interface {
 	// Run executes the logic at the current state, returning an error if one is
-	// encountered. Implementations are expected to add new [Node] objects to
-	// the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
-	// state should be pushed onto the stack as needed using [Parser.PushState].
+	// encountered. Implementations are expected to add new Node objects to
+	// the AST using ParseCursor.Push or ParseCursor.Node. As necessary, new
+	// parser state should be pushed onto the stack as needed using
+	// Parser.PushState.
 	Run(ctx context.Context, cur *ParseCursor[V]) error
 }
 
@@ -81,7 +82,7 @@ type parseFnState[V comparable] struct {
 	f func(context.Context, *ParseCursor[V]) error
 }
 
-// Run implements ParseState.Run.
+// Run implements [ParseState.Run].
 func (s *parseFnState[V]) Run(ctx context.Context, cur *ParseCursor[V]) error {
 	if s.f == nil {
 		return nil
@@ -90,7 +91,7 @@ func (s *parseFnState[V]) Run(ctx context.Context, cur *ParseCursor[V]) error {
 	return s.f(ctx, cur)
 }
 
-// ParseStateFn creates a State from the given Run function.
+// ParseStateFn creates a State from the given function.
 func ParseStateFn[V comparable](f func(context.Context, *ParseCursor[V]) error) ParseState[V] {
 	return &parseFnState[V]{f}
 }
@@ -126,7 +127,7 @@ type ParseCursor[V comparable] struct {
 	p *Parser[V]
 }
 
-// NewParseCursor creates a new ParserCursor for the given parser.
+// NewParseCursor creates a new [ParseCursor] for the given parser.
 func NewParseCursor[V comparable](p *Parser[V]) *ParseCursor[V] {
 	return &ParseCursor[V]{p: p}
 }
