@@ -130,9 +130,9 @@ in addition to the underlying reader's position. When the token has been fully
 processed it can be emitted to a channel for further processing by the `Parser`.
 
 Developers implement the token processing portion of the lexer by implementing
-`LexState` interface for each relevant lexer state. A `CustomLexerCursor` is
-passed to each `LexState` during processing and includes a number of methods
-that can be used to advance through the input text.
+`LexState` interface for each relevant lexer state. A `LexCursor` is passed to
+each `LexState` during processing and includes a number of methods that can be
+used to advance through the input text.
 
 For example, consider the following simple template language.
 
@@ -211,7 +211,7 @@ type LexState interface {
     // Run returns the next state to transition to or an error. If the returned
     // next state is nil or the returned error is io.EOF then the Lexer
     // finishes processing normally.
-    Run(context.Context, *CustomLexerCursor) (LexState, error)
+    Run(context.Context, *LexCursor) (LexState, error)
 }
 ```
 
@@ -238,23 +238,23 @@ advancing over the text.
 
 ```go
 // lexText tokenizes normal text.
-func lexText(ctx context.Context, c *lexparse.CustomLexerCursor) (lexparse.LexState, error) {
+func lexText(ctx context.Context, cur *lexparse.LexCursor) (lexparse.LexState, error) {
     for {
-        p := c.PeekN(2)
+        p := cur.PeekN(2)
         switch string(p) {
         case tokenBlockStart, tokenVarStart:
-            if c.Width() > 0 {
-                c.Emit(lexTypeText)
+            if cur.Width() > 0 {
+                cur.Emit(lexTypeText)
             }
             return lexparse.LexStateFn(lexCode), nil
         default:
         }
 
         // Advance the input.
-        if !c.Advance() {
+        if !cur.Advance() {
             // End of input. Emit the text up to this point.
-            if c.Width() > 0 {
-                c.Emit(lexTypeText)
+            if cur.Width() > 0 {
+                cur.Emit(lexTypeText)
             }
             return nil, nil
         }
@@ -326,7 +326,7 @@ flowchart-elk TD
 
 Similar to the lexer API, each parser state is represented by an object
 implementing the `ParseState` interface. It contains only a single `Run` method
-which handles processing input tokens while in that state. A `ParserContext` is
+which handles processing input tokens while in that state. A `ParseCursor` is
 passed to each `ParseState` during processing and includes a number of methods
 that can be used to examine the current token, advance to the next token, and
 manipulate the AST.
@@ -335,10 +335,11 @@ manipulate the AST.
 // ParseState is the state of the current parsing state machine. It defines the
 // logic to process the current state and returns the next state.
 type ParseState[V comparable] interface {
-    // Run returns the next state to transition to or an error. If the returned
-    // next state is nil or the returned error is io.EOF then the Lexer
-    // finishes processing normally.
-    Run(*ParserContext[V]) (ParseState[V], error)
+    // Run executes the logic at the current state, returning an error if one is
+    // encountered. Implementations are expected to add new [Node] objects to
+    // the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
+    // state should be pushed onto the stack as needed using [Parser.PushState].
+    Run(ctx context.Context, cur *ParseCursor[V]) error
 }
 ```
 
@@ -377,16 +378,16 @@ Here we push the later relevant expected state onto the parser's stack.
 
 ```go
 // parseSeq delegates to another parse function based on token type.
-func parseSeq(ctx *lexparse.ParserContext[*tmplNode]) error {
-    token := ctx.Peek()
+func parseSeq(ctx context.Context, cur *lexparse.ParseCursor[*tmplNode]) error {
+    token := cur.Peek(ctx)
 
     switch token.Type {
     case lexTypeText:
-        ctx.PushState(lexparse.ParseStateFn(parseText))
+        cur.PushState(lexparse.ParseStateFn(parseText))
     case lexTypeVarStart:
-        ctx.PushState(lexparse.ParseStateFn(parseVarStart))
+        cur.PushState(lexparse.ParseStateFn(parseVarStart))
     case lexTypeBlockStart:
-        ctx.PushState(lexparse.ParseStateFn(parseBlockStart))
+        cur.PushState(lexparse.ParseStateFn(parseBlockStart))
     }
 
     return nil
@@ -399,11 +400,11 @@ are pushed in reverse order so that they are handled in the order listed.
 
 ```go
 // parseVarStart handles var start (e.g. '{{').
-func parseVarStart(ctx *lexparse.ParserContext[*tmplNode]) error {
+func parseVarStart(ctx context.Context, cur *lexparse.ParseCursor[*tmplNode]) error {
     // Consume the var start token.
-    _ = ctx.Next()
+    _ = cur.Next(ctx)
 
-    ctx.PushState(
+    cur.PushState(
         lexparse.ParseStateFn(parseVar),
         lexparse.ParseStateFn(parseVarEnd),
     )
