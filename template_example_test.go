@@ -350,7 +350,7 @@ func parseElse(ctx context.Context, cur *lexparse.ParseCursor[*tmplNode]) error 
 	switch token.Type {
 	case lexTypeIdentifier:
 		// Validate we are at a sequence node.
-		if cur := cur.Pos(); cur.Value.typ != nodeTypeSeq {
+		if curPos := cur.Pos(); curPos.Value.typ != nodeTypeSeq {
 			return lexTokenErr(errIdentifier, token)
 		}
 	case lexparse.TokenTypeEOF:
@@ -368,7 +368,7 @@ func parseElse(ctx context.Context, cur *lexparse.ParseCursor[*tmplNode]) error 
 		cur.Climb()
 
 		// Validate that we are in a conditional and there isn't already an else branch.
-		if cur := cur.Pos(); cur.Value.typ != nodeTypeBranch || len(cur.Children) != 2 {
+		if curNode := cur.Pos(); curNode.Value.typ != nodeTypeBranch || len(curNode.Children) != 2 {
 			return lexTokenErr(errIdentifier, token)
 		}
 
