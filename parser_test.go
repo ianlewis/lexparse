@@ -163,7 +163,7 @@ func TestParser_parse_op2(t *testing.T) {
 	}
 }
 
-func TestParserContext_NextPeek(t *testing.T) {
+func TestParseCursor_NextPeek(t *testing.T) {
 	t.Parallel()
 
 	input := "A B C"
@@ -262,7 +262,7 @@ func TestParserContext_NextPeek(t *testing.T) {
 	}
 }
 
-func TestParserContext_Node(t *testing.T) {
+func TestParseCursor_Node(t *testing.T) {
 	t.Parallel()
 
 	parser := NewParser[string](nil, nil)
@@ -320,7 +320,7 @@ func TestParserContext_Node(t *testing.T) {
 	}
 }
 
-func TestParserContext_ClimbPos(t *testing.T) {
+func TestParseCursor_ClimbPos(t *testing.T) {
 	t.Parallel()
 
 	parser := NewParser[string](nil, nil)
@@ -388,7 +388,7 @@ func TestParserContext_ClimbPos(t *testing.T) {
 	}
 }
 
-func TestParserContext_Push(t *testing.T) {
+func TestParseCursor_Push(t *testing.T) {
 	t.Parallel()
 
 	parser := NewParser[string](nil, nil)
@@ -503,7 +503,7 @@ func TestParser_Replace(t *testing.T) {
 	}
 }
 
-func TestParserContext_Replace_root(t *testing.T) {
+func TestParseCursor_Replace_root(t *testing.T) {
 	t.Parallel()
 
 	parser := NewParser[string](nil, nil)
