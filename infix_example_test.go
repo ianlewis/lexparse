@@ -83,15 +83,16 @@ func tokenErr(err error, t *lexparse.Token) error {
 }
 
 // pratt implements a Pratt operator-precedence parser for infix expressions.
-func pratt(ctx *lexparse.ParserContext[*exprNode]) error {
-	n, err := parseExpr(ctx, 0, 0)
-	ctx.SetRoot(n)
+func pratt(ctx context.Context, cur *lexparse.ParseCursor[*exprNode]) error {
+	n, err := parseExpr(ctx, cur, 0, 0)
+	cur.SetRoot(n)
 
 	return err
 }
 
 func parseExpr(
-	ctx *lexparse.ParserContext[*exprNode],
+	ctx context.Context,
+	cur *lexparse.ParseCursor[*exprNode],
 	depth, minPrecedence int,
 ) (*lexparse.Node[*exprNode], error) {
 	// Check if the context is canceled.
@@ -102,7 +103,7 @@ func parseExpr(
 	default:
 	}
 
-	token := ctx.Next()
+	token := cur.Next(ctx)
 
 	var lhs *lexparse.Node[*exprNode]
 
@@ -113,20 +114,20 @@ func parseExpr(
 			return nil, tokenErr(err, token)
 		}
 
-		lhs = ctx.NewNode(&exprNode{
+		lhs = cur.NewNode(&exprNode{
 			typ: nodeTypeNum,
 			num: num,
 		})
 	case '(':
 		// Parse the expression inside the parentheses.
-		lhs2, err := parseExpr(ctx, depth+1, 0)
+		lhs2, err := parseExpr(ctx, cur, depth+1, 0)
 		if err != nil {
 			return nil, err
 		}
 
 		lhs = lhs2
 
-		t2 := ctx.Next()
+		t2 := cur.Next(ctx)
 		if t2.Type != ')' {
 			return nil, tokenErr(errUnclosedParen, t2)
 		}
@@ -140,7 +141,7 @@ outerL:
 	for {
 		var opVal *exprNode
 
-		opToken := ctx.Peek()
+		opToken := cur.Peek(ctx)
 		switch opToken.Type {
 		case '+', '-', '*', '/':
 			opVal = &exprNode{
@@ -165,10 +166,10 @@ outerL:
 			return lhs, nil
 		}
 
-		_ = ctx.Next() // Consume the operator token.
-		opNode := ctx.NewNode(opVal)
+		_ = cur.Next(ctx) // Consume the operator token.
+		opNode := cur.NewNode(opVal)
 
-		rhs, err := parseExpr(ctx, depth, opNode.Value.precedence())
+		rhs, err := parseExpr(ctx, cur, depth, opNode.Value.precedence())
 		if err != nil {
 			return nil, err
 		}

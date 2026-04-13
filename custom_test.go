@@ -33,7 +33,7 @@ const (
 type lexWordState struct{}
 
 //nolint:ireturn // Returning interface required to satisfy [LexState.Run]
-func (w *lexWordState) Run(_ context.Context, c *CustomLexerCursor) (LexState, error) {
+func (w *lexWordState) Run(_ context.Context, c *LexCursor) (LexState, error) {
 	rn := c.Peek()
 	if unicode.IsSpace(rn) || rn == EOF {
 		// NOTE: This can emit empty words.
@@ -52,11 +52,11 @@ func (w *lexWordState) Run(_ context.Context, c *CustomLexerCursor) (LexState, e
 func TestCustomLexerCursor_Peek(t *testing.T) {
 	t.Parallel()
 
-	cursor := NewCustomLexerCursor(
+	cur := NewLexCursor(
 		NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{}),
 	)
 
-	rn := cursor.Peek()
+	rn := cur.Peek()
 
 	if diff := cmp.Diff('H', rn); diff != "" {
 		t.Errorf("Peek (-want +got):\n%s", diff)
@@ -68,7 +68,7 @@ func TestCustomLexerCursor_Peek(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -78,11 +78,11 @@ func TestCustomLexerCursor_Peek(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+	if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 		t.Errorf("Err (-want +got):\n%s", diff)
 	}
 }
@@ -90,15 +90,15 @@ func TestCustomLexerCursor_Peek(t *testing.T) {
 func TestCustomLexerCursor_PeekN(t *testing.T) {
 	t.Parallel()
 
-	cursor := NewCustomLexerCursor(
+	cur := NewLexCursor(
 		NewCustomLexer(strings.NewReader("Hello\nWorld!"), &lexWordState{}),
 	)
 
-	if diff := cmp.Diff("Hello\n", string(cursor.PeekN(6))); diff != "" {
+	if diff := cmp.Diff("Hello\n", string(cur.PeekN(6))); diff != "" {
 		t.Errorf("PeekN (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff("Hello\nWorld!", string(cursor.PeekN(16))); diff != "" {
+	if diff := cmp.Diff("Hello\nWorld!", string(cur.PeekN(16))); diff != "" {
 		t.Errorf("PeekN (-want +got):\n%s", diff)
 	}
 
@@ -108,7 +108,7 @@ func TestCustomLexerCursor_PeekN(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -118,11 +118,11 @@ func TestCustomLexerCursor_PeekN(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+	if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 		t.Errorf("Err (-want +got):\n%s", diff)
 	}
 }
@@ -134,15 +134,15 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(true, cursor.Advance()); diff != "" {
+		if diff := cmp.Diff(true, cur.Advance()); diff != "" {
 			t.Errorf("Advance (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("ello\n!Adva", string(cursor.PeekN(10))); diff != "" {
+		if diff := cmp.Diff("ello\n!Adva", string(cur.PeekN(10))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -152,7 +152,7 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -162,19 +162,19 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(1, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(1, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("H", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("H", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -182,11 +182,11 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 	t.Run("end of input", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader(""), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(false, cursor.Advance()); diff != "" {
+		if diff := cmp.Diff(false, cur.Advance()); diff != "" {
 			t.Errorf("Advance (-want +got):\n%s", diff)
 		}
 
@@ -196,7 +196,7 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -206,19 +206,19 @@ func TestCustomLexerCursor_Advance(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -230,15 +230,15 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(5, cursor.AdvanceN(5)); diff != "" {
+		if diff := cmp.Diff(5, cur.AdvanceN(5)); diff != "" {
 			t.Errorf("AdvanceN (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("\n!Advance!", string(cursor.PeekN(10))); diff != "" {
+		if diff := cmp.Diff("\n!Advance!", string(cur.PeekN(10))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -248,7 +248,7 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 			Column: 6,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -258,19 +258,19 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(5, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(5, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Hello", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("Hello", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -278,11 +278,11 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(15, cursor.AdvanceN(16)); diff != "" {
+		if diff := cmp.Diff(15, cur.AdvanceN(16)); diff != "" {
 			t.Errorf("AdvanceN (-want +got):\n%s", diff)
 		}
 
@@ -292,7 +292,7 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -302,19 +302,19 @@ func TestCustomLexerCursor_AdvanceN(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(15, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(15, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Hello\n!Advance!", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("Hello\n!Advance!", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -327,15 +327,15 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Advance!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(true, cursor.Discard()); diff != "" {
+		if diff := cmp.Diff(true, cur.Discard()); diff != "" {
 			t.Errorf("Discard (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("ello\n!Adva", string(cursor.PeekN(10))); diff != "" {
+		if diff := cmp.Diff("ello\n!Adva", string(cur.PeekN(10))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -345,7 +345,7 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -355,19 +355,19 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -375,11 +375,11 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 	t.Run("end of input", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader(""), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(false, cursor.Discard()); diff != "" {
+		if diff := cmp.Diff(false, cur.Discard()); diff != "" {
 			t.Errorf("Discard (-want +got):\n%s", diff)
 		}
 
@@ -389,7 +389,7 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -399,19 +399,19 @@ func TestCustomLexerCursor_Discard(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -423,15 +423,15 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(7, cursor.DiscardN(7)); diff != "" {
+		if diff := cmp.Diff(7, cur.DiscardN(7)); diff != "" {
 			t.Errorf("DiscardN (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Discard!", string(cursor.PeekN(8))); diff != "" {
+		if diff := cmp.Diff("Discard!", string(cur.PeekN(8))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -441,7 +441,7 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -451,19 +451,19 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -471,11 +471,11 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 	t.Run("past end", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Discard!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(15, cursor.DiscardN(16)); diff != "" {
+		if diff := cmp.Diff(15, cur.DiscardN(16)); diff != "" {
 			t.Errorf("DiscardN (-want +got):\n%s", diff)
 		}
 
@@ -485,7 +485,7 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -495,19 +495,19 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 			Column: 10,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -517,15 +517,15 @@ func TestCustomLexerCursor_DiscardN(t *testing.T) {
 func TestCustomLexerCursor_Find_match(t *testing.T) {
 	t.Parallel()
 
-	cursor := NewCustomLexerCursor(
+	cur := NewLexCursor(
 		NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{}),
 	)
 
-	if diff := cmp.Diff("Find", cursor.Find([]string{"Find"})); diff != "" {
+	if diff := cmp.Diff("Find", cur.Find([]string{"Find"})); diff != "" {
 		t.Errorf("Find (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff("Find!", string(cursor.PeekN(5))); diff != "" {
+	if diff := cmp.Diff("Find!", string(cur.PeekN(5))); diff != "" {
 		t.Errorf("PeekN (-want +got):\n%s", diff)
 	}
 
@@ -535,7 +535,7 @@ func TestCustomLexerCursor_Find_match(t *testing.T) {
 		Column: 2,
 	}
 
-	if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -545,19 +545,19 @@ func TestCustomLexerCursor_Find_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(7, cursor.Width()); diff != "" {
+	if diff := cmp.Diff(7, cur.Width()); diff != "" {
 		t.Errorf("Width (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff("Hello\n!", cursor.Token()); diff != "" {
+	if diff := cmp.Diff("Hello\n!", cur.Token()); diff != "" {
 		t.Errorf("Token (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+	if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 		t.Errorf("Err (-want +got):\n%s", diff)
 	}
 }
@@ -565,11 +565,11 @@ func TestCustomLexerCursor_Find_match(t *testing.T) {
 func TestCustomLexerCursor_Find_short_match(t *testing.T) {
 	t.Parallel()
 
-	cursor := NewCustomLexerCursor(
+	cur := NewLexCursor(
 		NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{}),
 	)
 
-	if diff := cmp.Diff("Find!", cursor.Find([]string{"no match", "Find!"})); diff != "" {
+	if diff := cmp.Diff("Find!", cur.Find([]string{"no match", "Find!"})); diff != "" {
 		t.Errorf("Find (-want +got):\n%s", diff)
 	}
 
@@ -579,7 +579,7 @@ func TestCustomLexerCursor_Find_short_match(t *testing.T) {
 		Column: 2,
 	}
 
-	if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -589,19 +589,19 @@ func TestCustomLexerCursor_Find_short_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(7, cursor.Width()); diff != "" {
+	if diff := cmp.Diff(7, cur.Width()); diff != "" {
 		t.Errorf("Width (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff("Hello\n!", cursor.Token()); diff != "" {
+	if diff := cmp.Diff("Hello\n!", cur.Token()); diff != "" {
 		t.Errorf("Token (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+	if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 		t.Errorf("Err (-want +got):\n%s", diff)
 	}
 }
@@ -610,11 +610,11 @@ func TestCustomLexerCursor_Find_short_match(t *testing.T) {
 func TestCustomLexerCursor_Find_no_match(t *testing.T) {
 	t.Parallel()
 
-	cursor := NewCustomLexerCursor(
+	cur := NewLexCursor(
 		NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{}),
 	)
 
-	if diff := cmp.Diff("", cursor.Find([]string{"no match"})); diff != "" {
+	if diff := cmp.Diff("", cur.Find([]string{"no match"})); diff != "" {
 		t.Errorf("Find (-want +got):\n%s", diff)
 	}
 
@@ -624,7 +624,7 @@ func TestCustomLexerCursor_Find_no_match(t *testing.T) {
 		Column: 7,
 	}
 
-	if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+	if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 		t.Errorf("Pos (-want +got):\n%s", diff)
 	}
 
@@ -634,19 +634,19 @@ func TestCustomLexerCursor_Find_no_match(t *testing.T) {
 		Column: 1,
 	}
 
-	if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+	if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 		t.Errorf("Cursor (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(12, cursor.Width()); diff != "" {
+	if diff := cmp.Diff(12, cur.Width()); diff != "" {
 		t.Errorf("Width (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff("Hello\n!Find!", cursor.Token()); diff != "" {
+	if diff := cmp.Diff("Hello\n!Find!", cur.Token()); diff != "" {
 		t.Errorf("Token (-want +got):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+	if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 		t.Errorf("Err (-want +got):\n%s", diff)
 	}
 }
@@ -657,15 +657,15 @@ func TestCustomLexerCursor_Ignore(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Ignore!\n"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff(7, cursor.AdvanceN(7)); diff != "" {
+		if diff := cmp.Diff(7, cur.AdvanceN(7)); diff != "" {
 			t.Errorf("AdvanceN (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Ignore!", string(cursor.PeekN(7))); diff != "" {
+		if diff := cmp.Diff("Ignore!", string(cur.PeekN(7))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -675,7 +675,7 @@ func TestCustomLexerCursor_Ignore(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -685,25 +685,25 @@ func TestCustomLexerCursor_Ignore(t *testing.T) {
 			Column: 1,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(7, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(7, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Hello\n!", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("Hello\n!", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		cursor.Ignore()
+		cur.Ignore()
 
-		if diff := cmp.Diff(7, cursor.AdvanceN(7)); diff != "" {
+		if diff := cmp.Diff(7, cur.AdvanceN(7)); diff != "" {
 			t.Errorf("AdvanceN (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("\n", string(cursor.PeekN(1))); diff != "" {
+		if diff := cmp.Diff("\n", string(cur.PeekN(1))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -713,7 +713,7 @@ func TestCustomLexerCursor_Ignore(t *testing.T) {
 			Column: 9,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -723,19 +723,19 @@ func TestCustomLexerCursor_Ignore(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(7, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(7, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Ignore!", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("Ignore!", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -748,15 +748,15 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 	t.Run("match", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff("Find", cursor.DiscardTo([]string{"Find"})); diff != "" {
+		if diff := cmp.Diff("Find", cur.DiscardTo([]string{"Find"})); diff != "" {
 			t.Errorf("DiscardTo (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("Find!", string(cursor.PeekN(5))); diff != "" {
+		if diff := cmp.Diff("Find!", string(cur.PeekN(5))); diff != "" {
 			t.Errorf("PeekN (-want +got):\n%s", diff)
 		}
 
@@ -766,7 +766,7 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -776,19 +776,19 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 			Column: 2,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})
@@ -797,11 +797,11 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 	t.Run("no match", func(t *testing.T) {
 		t.Parallel()
 
-		cursor := NewCustomLexerCursor(
+		cur := NewLexCursor(
 			NewCustomLexer(strings.NewReader("Hello\n!Find!"), &lexWordState{}),
 		)
 
-		if diff := cmp.Diff("", cursor.DiscardTo([]string{"no match"})); diff != "" {
+		if diff := cmp.Diff("", cur.DiscardTo([]string{"no match"})); diff != "" {
 			t.Errorf("DiscardTo (-want +got):\n%s", diff)
 		}
 
@@ -811,7 +811,7 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 			Column: 7,
 		}
 
-		if diff := cmp.Diff(expectedPos, cursor.Pos()); diff != "" {
+		if diff := cmp.Diff(expectedPos, cur.Pos()); diff != "" {
 			t.Errorf("Pos (-want +got):\n%s", diff)
 		}
 
@@ -821,19 +821,19 @@ func TestCustomLexerCursor_DiscardTo(t *testing.T) {
 			Column: 7,
 		}
 
-		if diff := cmp.Diff(expectedCursor, cursor.Cursor()); diff != "" {
+		if diff := cmp.Diff(expectedCursor, cur.Cursor()); diff != "" {
 			t.Errorf("Cursor (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(0, cursor.Width()); diff != "" {
+		if diff := cmp.Diff(0, cur.Width()); diff != "" {
 			t.Errorf("Width (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff("", cursor.Token()); diff != "" {
+		if diff := cmp.Diff("", cur.Token()); diff != "" {
 			t.Errorf("Token (-want +got):\n%s", diff)
 		}
 
-		if diff := cmp.Diff(nil, cursor.l.Err(), cmpopts.EquateErrors()); diff != "" {
+		if diff := cmp.Diff(nil, cur.l.Err(), cmpopts.EquateErrors()); diff != "" {
 			t.Errorf("Err (-want +got):\n%s", diff)
 		}
 	})

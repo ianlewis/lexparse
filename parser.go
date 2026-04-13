@@ -74,24 +74,24 @@ type ParseState[V comparable] interface {
 	// encountered. Implementations are expected to add new [Node] objects to
 	// the AST using [Parser.Push] or [Parser.Node). As necessary, new parser
 	// state should be pushed onto the stack as needed using [Parser.PushState].
-	Run(ctx *ParserContext[V]) error
+	Run(ctx context.Context, cur *ParseCursor[V]) error
 }
 
 type parseFnState[V comparable] struct {
-	f func(*ParserContext[V]) error
+	f func(context.Context, *ParseCursor[V]) error
 }
 
 // Run implements ParseState.Run.
-func (s *parseFnState[V]) Run(ctx *ParserContext[V]) error {
+func (s *parseFnState[V]) Run(ctx context.Context, cur *ParseCursor[V]) error {
 	if s.f == nil {
 		return nil
 	}
 
-	return s.f(ctx)
+	return s.f(ctx, cur)
 }
 
 // ParseStateFn creates a State from the given Run function.
-func ParseStateFn[V comparable](f func(*ParserContext[V]) error) ParseState[V] {
+func ParseStateFn[V comparable](f func(context.Context, *ParseCursor[V]) error) ParseState[V] {
 	return &parseFnState[V]{f}
 }
 
@@ -119,74 +119,76 @@ type TokenSource interface {
 	NextToken(ctx context.Context) *Token
 }
 
-// ParserContext provides context for the current parsing operation,
-// including access to the parser state and methods to manipulate the parse
-// tree.
-type ParserContext[V comparable] struct {
-	//nolint:containedctx // Embedding context required for interface compliance.
-	context.Context
-
+// ParseCursor is a type that allows for processing input tokens and building a
+// parse tree. It is passed to [ParseState.Run] and provides methods for
+// manipulating the parser state and the parse tree.
+type ParseCursor[V comparable] struct {
 	p *Parser[V]
+}
+
+// NewParseCursor creates a new ParserCursor for the given parser.
+func NewParseCursor[V comparable](p *Parser[V]) *ParseCursor[V] {
+	return &ParseCursor[V]{p: p}
 }
 
 // PushState pushes a number of new expected future states onto the state stack
 // in reverse order.
-func (ctx *ParserContext[V]) PushState(states ...ParseState[V]) {
-	ctx.p.pushState(states...)
+func (cur *ParseCursor[V]) PushState(states ...ParseState[V]) {
+	cur.p.pushState(states...)
 }
 
 // SetRoot sets the root of the parse tree to the given node. The current node
 // is also set to the root node. This is useful for resetting the parser to a
 // new root node.
-func (ctx *ParserContext[V]) SetRoot(root *Node[V]) {
-	ctx.p.setRoot(root)
+func (cur *ParseCursor[V]) SetRoot(root *Node[V]) {
+	cur.p.setRoot(root)
 }
 
 // Root returns the root of the parse tree.
-func (ctx *ParserContext[V]) Root() *Node[V] {
-	return ctx.p.root
+func (cur *ParseCursor[V]) Root() *Node[V] {
+	return cur.p.root
 }
 
 // Peek returns the next token from the lexer without consuming it.
-func (ctx *ParserContext[V]) Peek() *Token {
-	return ctx.p.peek(ctx)
+func (cur *ParseCursor[V]) Peek(ctx context.Context) *Token {
+	return cur.p.peek(ctx)
 }
 
 // Next returns the next token from the lexer. This is the new current token
 // position.
-func (ctx *ParserContext[V]) Next() *Token {
-	return ctx.p.nextToken(ctx)
+func (cur *ParseCursor[V]) Next(ctx context.Context) *Token {
+	return cur.p.nextToken(ctx)
 }
 
 // Pos returns the current node position in the tree.
-func (ctx *ParserContext[V]) Pos() *Node[V] {
-	return ctx.p.node
+func (cur *ParseCursor[V]) Pos() *Node[V] {
+	return cur.p.node
 }
 
 // Push creates a new node, adds it as a child to the current node, updates
 // the current node to the new node, and returns the new node.
-func (ctx *ParserContext[V]) Push(v V) *Node[V] {
-	return ctx.p.push(v)
+func (cur *ParseCursor[V]) Push(v V) *Node[V] {
+	return cur.p.push(v)
 }
 
 // Node creates a new node at the current token position and adds it as a
 // child to the current node. The current node is not updated.
-func (ctx *ParserContext[V]) Node(v V) *Node[V] {
-	return ctx.p.addNodeHere(v)
+func (cur *ParseCursor[V]) Node(v V) *Node[V] {
+	return cur.p.addNodeHere(v)
 }
 
 // NewNode creates a new node at the current token position and returns it
 // without adding it to the tree.
-func (ctx *ParserContext[V]) NewNode(v V) *Node[V] {
-	return ctx.p.newNode(v)
+func (cur *ParseCursor[V]) NewNode(v V) *Node[V] {
+	return cur.p.newNode(v)
 }
 
 // Climb updates the current node position to the current node's parent
 // returning the previous current node. It is a no-op that returns the root
 // node if called on the root node. Updates the end position of the parent node
 // to the end position of the current node.
-func (ctx *ParserContext[V]) Climb() *Node[V] {
-	return ctx.p.climb()
+func (cur *ParseCursor[V]) Climb() *Node[V] {
+	return cur.p.climb()
 }
 
 // Replace replaces the current node with a new node with the given value. The
@@ -194,8 +196,8 @@ func (ctx *ParserContext[V]) Climb() *Node[V] {
 // replace the root node.
 //
 //nolint:ireturn // returning the generic interface is needed to return the previous value.
-func (ctx *ParserContext[V]) Replace(v V) V {
-	return ctx.p.replace(v)
+func (cur *ParseCursor[V]) Replace(v V) V {
+	return cur.p.replace(v)
 }
 
 // NewParser creates a new Parser that reads from the tokens channel. The
@@ -252,10 +254,7 @@ type Parser[V comparable] struct {
 //
 // The caller can request that the parser stop by canceling ctx.
 func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
-	parserCtx := &ParserContext[V]{
-		Context: ctx,
-		p:       p,
-	}
+	cur := NewParseCursor(p)
 
 	for {
 		state := p.stateStack.pop()
@@ -275,7 +274,7 @@ func (p *Parser[V]) Parse(ctx context.Context) (*Node[V], error) {
 		}
 
 		var err error
-		if err = state.Run(parserCtx); err != nil {
+		if err = state.Run(ctx, cur); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
