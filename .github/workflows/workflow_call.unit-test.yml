@@ -33,6 +33,7 @@ jobs:
     strategy:
       matrix:
         go-version:
+          # TODO: Add other Go versions here.
           # NOTE: Go 1.24 is required for tool dependencies.
           # NOTE: The Go team only supports the current and one previous
           #       version.
@@ -46,7 +47,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
 
@@ -72,7 +73,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out

@@ -13,7 +13,7 @@
 
     // Add Aqua present to allow updating CLI tools.
     // https://aquaproj.github.io/docs/guides/renovate/
-    "github>aquaproj/aqua-renovate-config#2.9.0",
+    "github>aquaproj/aqua-renovate-config#2.13.0",
 
     // Update version numbers in Makefile.
     // https://docs.renovatebot.com/presets-customManagers/#custommanagersmakefileversions
@@ -38,16 +38,25 @@
   // Apply a dependency cooldown of 14 days. This helps to avoid issues with
   // compromised releases.
   // https://blog.yossarian.net/2025/11/21/We-should-all-be-using-dependency-cooldowns
+  // https://docs.renovatebot.com/configuration-options/#minimumreleaseage
   minimumReleaseAge: "14 days",
-  // These options suppress PR creation for dependencies that were released
-  // within minimumReleaseAge.
-  // https://docs.renovatebot.com/configuration-options/#suppress-branchpr-creation-for-x-days
-  prCreation: "not-pending",
+  // internalChecksFilter suppress PR creation for dependencies that were
+  // released within minimumReleaseAge.
+  // strict: All pending releases will be filtered. PRs will be skipped unless a
+  // non-pending version is available.
+  // https://docs.renovatebot.com/configuration-options/#internalchecksfilter
   internalChecksFilter: "strict",
 
   // Enable the lock file maintenance feature to keep transitive dependencies up
   // to date.
   lockFileMaintenance: {
+    enabled: true,
+    // NOTE: Same as schedule:monthly preset.
+    schedule: ["* 0-3 1 * *"],
+  },
+
+  // Enable git submodule updates.
+  "git-submodules": {
     enabled: true,
     // NOTE: Same as schedule:monthly preset.
     schedule: ["* 0-3 1 * *"],
@@ -75,6 +84,11 @@
       matchUpdateTypes: ["minor", "patch"],
       groupName: "github-actions",
       pinDigests: true,
+    },
+    {
+      matchManagers: ["pep621"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "pep621",
     },
     {
       matchManagers: ["pip_requirements"],

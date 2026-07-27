@@ -1,4 +1,4 @@
-# Copyright 2025 Ian Lewis
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -179,7 +179,7 @@ linters:
     - gosec
 
     # Report certain i18n/l10n anti-patterns in your Go codebase.
-    # NOTE: the project does not support i18n/l10n actively.
+    # NOTE: not actively supporting i18n/l10n.
     # - gosmopolitan
 
     # Analyze expression groups.
@@ -373,7 +373,7 @@ linters:
   settings:
     cyclop:
       max-complexity: 30
-      package-average: 6
+      package-average: 5
 
     depguard:
       rules:
@@ -550,3 +550,9 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+
+    paths:
+      # Exclude all files in the vendor directory.
+      - "^vendor/"
+      - "^node_modules/"
+      - "^third_party/"
