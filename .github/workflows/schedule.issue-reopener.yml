@@ -42,9 +42,9 @@ jobs:
       contents: read # Needed for private repositories.
       issues: write # Needed to comment on and reopen issues.
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Issue Reopener
-        uses: ianlewis/todo-issue-reopener@05ca1b2493e450e1cc464bb25e0fa735ae8e4a00 # v1.7.0
+        uses: ianlewis/todo-issue-reopener@a8fcb67fd9928a9444ee466fdd816b4e3f0b67d9 # v1.8.0
