@@ -458,7 +458,8 @@ func parseBlockStart(ctx context.Context, cur *lexparse.ParseCursor[*tmplNode]) 
 		// NOTE: parseElse, parseEndif should already be on the stack.
 	default:
 		return lexTokenErr(
-			fmt.Errorf("%w: expected %q, %q, or %q", errIdentifier, tokenIf, tokenElse, tokenEndif), token)
+			fmt.Errorf("%w: expected %q, %q, or %q", errIdentifier, tokenIf, tokenElse, tokenEndif), token,
+		)
 	}
 
 	return nil
