@@ -553,6 +553,11 @@ linters:
 
     paths:
       # Exclude all files in the vendor directory.
-      - "^vendor/"
       - "^node_modules/"
-      - "^third_party/"
+      # - "^third_party/"
+      # - "^vendor/"
+
+    rules:
+      - path: _test\.go$
+        linters:
+          - goconst
